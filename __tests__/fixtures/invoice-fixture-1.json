@@ -1,0 +1,46 @@
+{
+  "invoiceId": "INV-2025-0342",
+  "vendor": {
+    "name": "ABC Suppliers Inc.",
+    "address": "123 Vendor Street, Business City, BC 90210",
+    "phone": "555-123-4567",
+    "email": "billing@abcsuppliers.com"
+  },
+  "customer": {
+    "name": "Your Company Name",
+    "address": "456 Main Street, Your City, YC 12345",
+    "accountNumber": "CUST-10042"
+  },
+  "invoiceDate": "2025-03-15T00:00:00.000Z",
+  "dueDate": "2025-04-14T00:00:00.000Z",
+  "items": [
+    {
+      "description": "Premium Widget XL",
+      "quantity": 10,
+      "unitPrice": 125.00,
+      "totalPrice": 1250.00,
+      "sku": "PWX-100"
+    },
+    {
+      "description": "Standard Component Set",
+      "quantity": 5,
+      "unitPrice": 75.50,
+      "totalPrice": 377.50,
+      "sku": "SCS-200"
+    },
+    {
+      "description": "Installation Service",
+      "quantity": 1,
+      "unitPrice": 250.00,
+      "totalPrice": 250.00,
+      "sku": "SRV-INST"
+    }
+  ],
+  "subtotal": 1877.50,
+  "taxRate": 0.085,
+  "taxAmount": 159.59,
+  "total": 2037.09,
+  "paymentTerms": "Net 30",
+  "paymentStatus": "Unpaid",
+  "notes": "Please reference invoice number on all payments."
+}

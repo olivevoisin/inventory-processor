@@ -1,0 +1,56 @@
+{
+  "name": "inventory-management-system",
+  "version": "1.0.0",
+  "description": "Inventory management system with voice processing, OCR, and Google Sheets integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "jest --config=jest.config.js",
+    "test:unit": "jest --config=jest.config.js --testPathPattern=__tests__/unit",
+    "test:integration": "jest --config=jest.config.js --testPathPattern=__tests__/integration",
+    "test:e2e": "jest --config=jest.config.js --testPathPattern=__tests__/integration/end-to-end",
+    "test:watch": "jest --config=jest.config.js --watch",
+    "test:coverage": "jest --config=jest.config.js --coverage",
+    "test:ci": "jest --config=jest.config.js --ci --coverage",
+    "precommit": "npm run lint && npm test",
+    "prepare": "husky install"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm run precommit",
+      "pre-push": "npm run test:coverage"
+    }
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^2.4.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.1.4",
+    "google-auth-library": "^9.2.0",
+    "google-spreadsheet": "^4.1.1",
+    "helmet": "^7.2.0",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "codecov": "^3.8.2",
+    "compression": "^1.8.0",
+    "eslint": "^8.38.0",
+    "husky": "^8.0.3",
+    "jest": "^29.7.0",
+    "madge": "^8.0.0",
+    "mongodb-memory-server": "^8.16.1",
+    "nodemon": "^2.0.22",
+    "supertest": "^6.3.4",
+    "tesseract.js": "^6.0.0",
+    "winston": "^3.17.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

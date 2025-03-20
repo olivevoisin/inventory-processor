@@ -1,0 +1,42 @@
+{
+  "results": {
+    "channels": [
+      {
+        "alternatives": [
+          {
+            "transcript": "Inventory update. We have received 25 new units of item XYZ-100. Please update the stock levels and notify the sales team.",
+            "confidence": 0.98,
+            "words": [
+              {
+                "word": "Inventory",
+                "start": 0.01,
+                "end": 0.52,
+                "confidence": 0.99
+              },
+              {
+                "word": "update",
+                "start": 0.53,
+                "end": 0.87,
+                "confidence": 0.98
+              },
+              {
+                "word": "We",
+                "start": 1.2,
+                "end": 1.31,
+                "confidence": 0.99
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "metadata": {
+    "transaction_key": "test-transaction-123",
+    "request_id": "test-request-123",
+    "sha256": "test-sha256",
+    "created": "2025-03-19T10:00:00.000Z",
+    "duration": 15.5,
+    "channels": 1
+  }
+}
