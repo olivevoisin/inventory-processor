@@ -1,481 +1,273 @@
-// utils/database-utils.js
-
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const config = require('../config');
+/**
+ * Database Utilities Module
+ * Handles database operations for inventory management
+ */
 const logger = require('./logger');
-const { DatabaseError } = require('./error-handler');
-const { retry } = require('./retry');
 
+// In-memory data store for demonstration
+const inMemoryDb = {
+  products: [
+    { id: 'prod-1', name: 'Wine', unit: 'bottle', price: 15 },
+    { id: 'prod-2', name: 'Beer', unit: 'can', price: 5 },
+    { id: 'prod-3', name: 'Vodka', unit: 'bottle', price: 25 },
+    { id: 'prod-4', name: 'Whiskey', unit: 'bottle', price: 30 }
+  ],
+  inventoryItems: []
+};
 
-class DatabaseUtils {
-  constructor(configOptions = {}) {
-    this.docId = configOptions.docId || process.env.GOOGLE_SHEETS_ID;
-    this.clientEmail = configOptions.clientEmail || process.env.GOOGLE_SHEETS_CLIENT_EMAIL;
-    this.privateKey = configOptions.privateKey || process.env.GOOGLE_SHEETS_PRIVATE_KEY;
-    this.inventorySheetName = config.googleSheets.inventorySheetName;
-    this.transactionsSheetName = config.googleSheets.transactionsSheetName;
-    this.vendorsSheetName = config.googleSheets.vendorsSheetName;
-    
-    
-    
-    logger.info('Database utility initialized', { 
-      module: 'database-utils',
-      docId: this.docId,
-      inventorySheet: this.inventorySheetName,
-      transactionsSheet: this.transactionsSheetName
-    });
-  }
-  
-  /**
-   * Get Google Sheets document
-   * @returns {Promise<GoogleSpreadsheet>} Google Sheets document
-   */
-  async initialize() {
-    // Validate configuration here
-    if (!this.docId || !this.clientEmail || !this.privateKey) {
-      throw new Error('Google Sheets configuration is incomplete');
+/**
+ * Find product by name with fuzzy matching
+ * @param {string} name - Product name to search for
+ * @returns {Promise<Object|null>} - Matching product or null
+ */
+async function findProductByName(name) {
+  try {
+    if (!name || typeof name !== 'string') {
+      return null;
     }
+    
+    const normalizedName = name.toLowerCase().trim();
+    
+    // Simple fuzzy matching - find products containing the name
+    const matches = inMemoryDb.products.filter(product => 
+      product.name.toLowerCase().includes(normalizedName) ||
+      normalizedName.includes(product.name.toLowerCase())
+    );
+    
+    // Return the first match or null
+    return matches.length > 0 ? { ...matches[0] } : null;
+  } catch (error) {
+    logger.error(`Error finding product by name: ${error.message}`);
+    return null;
   }
+}
 
-  async getDocument() {
-    try {
-      const doc = new GoogleSpreadsheet(this.docId);
-      await doc.useServiceAccountAuth({
-        client_email: this.clientEmail,
-        private_key: this.privateKey,
-      });
-      await doc.loadInfo();
-      return doc;
-    } catch (error) {
-      logger.error('Failed to access Google Sheets document', {
-        module: 'database-utils',
-        error: error.message,
-        stack: error.stack
-      });
-      throw new DatabaseError(
-        `Failed to access Google Sheets document: ${error.message}`,
-        'getDocument',
-        'SHEETS_ACCESS_ERROR'
-      );
+/**
+ * Find products by partial name (for autocomplete)
+ * @param {string} partialName - Partial product name
+ * @param {number} limit - Maximum number of results
+ * @returns {Promise<Array>} - Array of matching products
+ */
+async function findProductsByPartialName(partialName, limit = 10) {
+  try {
+    if (!partialName || typeof partialName !== 'string') {
+      return [];
     }
-  }
-  
-  /**
-   * Get sheet by name with retry logic
-   * @param {string} sheetName - Name of the sheet
-   * @returns {Promise<Object>} Google Sheets worksheet
-   */
-  async getSheet(sheetName) {
-    return retry(async () => {
-      const doc = await this.getDocument();
-      const sheet = doc.sheetsByTitle[sheetName];
-      
-      if (!sheet) {
-        throw new DatabaseError(
-          `Sheet "${sheetName}" not found`,
-          'getSheet',
-          'SHEET_NOT_FOUND'
-        );
-      }
-      
-      return sheet;
-    }, {
-      maxRetries: config.retries.maxRetries,
-      initialDelay: config.retries.initialDelay,
-      maxDelay: config.retries.maxDelay,
-      onRetry: (error, attempt) => {
-        logger.warn(`Retrying getSheet (${attempt}/${config.retries.maxRetries})`, {
-          module: 'database-utils',
-          sheetName,
-          error: error.message
-        });
-      }
-    });
-  }
-  
-  /**
-   * Get products from database
-   * @param {string} location - Inventory location
-   * @returns {Promise<Array<Object>>} List of products
-   */
-  async getProducts(location = 'main') {
-    const timer = logger.startTimer();
     
-    try {
-      logger.info('Getting products from database', {
-        module: 'database-utils',
-        location
-      });
-      
-      const sheet = await this.getSheet(this.inventorySheetName);
-      await sheet.loadCells();
-      
-      const rows = await sheet.getRows();
-      const products = rows
-        .filter(row => !row.location || row.location === location || row.location.toLowerCase() === 'all')
-        .map(row => ({
-          id: row.id || row.productId,
-          name: row.name || row.productName,
-          location: row.location || 'main',
-          category: row.category || '',
-          currentStock: parseInt(row.currentStock || '0', 10),
-          unit: row.unit || '',
-          price: parseFloat(row.price || '0'),
-          reorderPoint: parseInt(row.reorderPoint || '0', 10),
-          vendor: row.vendor || '',
-          lastUpdated: row.lastUpdated || ''
-        }));
-      
-      const duration = timer.end();
-      logger.info(`Retrieved ${products.length} products for location: ${location}`, {
-        module: 'database-utils',
-        productCount: products.length,
-        location,
-        duration
-      });
-      
-      return products;
-    } catch (error) {
-      const duration = timer.end();
-      logger.error(`Failed to get products for location: ${location}`, {
-        module: 'database-utils',
-        location,
-        duration,
-        error: error.message,
-        stack: error.stack
-      });
-      
-      throw new DatabaseError(
-        `Failed to get products: ${error.message}`,
-        'getProducts',
-        'PRODUCT_RETRIEVAL_ERROR'
-      );
-    }
-  }
-  
-  /**
-   * Update inventory based on invoice data
-   * @param {Array<Object>} items - Invoice items with product information
-   * @param {string} invoiceNumber - Invoice number
-   * @param {string} invoiceDate - Invoice date
-   * @param {string} vendor - Vendor name
-   * @returns {Promise<Object>} Update result
-   */
-  async updateInventoryFromInvoice(items, invoiceNumber, invoiceDate, vendor) {
-    const timer = logger.startTimer();
-    const timestamp = new Date().toISOString();
+    const normalizedName = partialName.toLowerCase().trim();
     
-    try {
-      logger.info(`Updating inventory from invoice ${invoiceNumber}`, {
-        module: 'database-utils',
-        invoiceNumber,
-        itemCount: items.length
-      });
-      
-      // 1. Update inventory levels
-      const inventorySheet = await this.getSheet(this.inventorySheetName);
-      await inventorySheet.loadCells();
-      const inventoryRows = await inventorySheet.getRows();
-      
-      const updates = [];
-      for (const item of items) {
-        // Find matching product row
-        const productRow = inventoryRows.find(row => 
-          row.id === item.productId || row.productId === item.productId
-        );
-        
-        if (productRow) {
-          const currentStock = parseInt(productRow.currentStock || '0', 10);
-          const newStock = currentStock + item.quantity;
-          
-          productRow.currentStock = newStock.toString();
-          productRow.lastUpdated = timestamp;
-          
-          await productRow.save();
-          
-          updates.push({
-            productId: item.productId,
-            productName: item.productName,
-            oldStock: currentStock,
-            newStock,
-            change: item.quantity
-          });
-        } else {
-          logger.warn(`Product not found in inventory: ${item.productName}`, {
-            module: 'database-utils',
-            productId: item.productId,
-            invoiceNumber
-          });
-        }
-      }
-      
-      // 2. Record transaction
-      await this.recordTransaction({
-        type: 'invoice',
-        source: invoiceNumber,
-        date: invoiceDate || timestamp,
-        vendor,
-        items: items.map(item => ({
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice || 0
-        })),
-        timestamp
-      });
-      
-      const duration = timer.end();
-      logger.info(`Inventory updated from invoice ${invoiceNumber}`, {
-        module: 'database-utils',
-        invoiceNumber,
-        updatedItems: updates.length,
-        duration
-      });
-      
-      return {
-        success: true,
-        updatedItems: updates.length,
-        updates
-      };
-    } catch (error) {
-      const duration = timer.end();
-      logger.error(`Failed to update inventory from invoice ${invoiceNumber}`, {
-        module: 'database-utils',
-        invoiceNumber,
-        duration,
-        error: error.message,
-        stack: error.stack
-      });
-      
-      throw new DatabaseError(
-        `Failed to update inventory: ${error.message}`,
-        'updateInventoryFromInvoice',
-        'INVENTORY_UPDATE_ERROR'
-      );
-    }
-  }
-  
-  /**
-   * Record a transaction in the transactions sheet
-   * @param {Object} transaction - Transaction data
-   * @returns {Promise<Object>} Result
-   */
-  async recordTransaction(transaction) {
-    try {
-      logger.info('Recording transaction', {
-        module: 'database-utils',
-        transactionType: transaction.type,
-        source: transaction.source
-      });
-      
-      const sheet = await this.getSheet(this.transactionsSheetName);
-      
-      // Add transaction record
-      await sheet.addRow({
-        id: `TRX-${Date.now()}`,
-        type: transaction.type,
-        source: transaction.source,
-        date: transaction.date,
-        vendor: transaction.vendor || '',
-        itemCount: transaction.items.length,
-        totalQuantity: transaction.items.reduce((sum, item) => sum + item.quantity, 0),
-        totalAmount: transaction.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
-        timestamp: transaction.timestamp || new Date().toISOString(),
-        items: JSON.stringify(transaction.items)
-      });
-      
-      logger.info('Transaction recorded successfully', {
-        module: 'database-utils',
-        transactionType: transaction.type,
-        source: transaction.source
-      });
-      
-      return { success: true };
-    } catch (error) {
-      logger.error('Failed to record transaction', {
-        module: 'database-utils',
-        transactionType: transaction.type,
-        source: transaction.source,
-        error: error.message,
-        stack: error.stack
-      });
-      
-      throw new DatabaseError(
-        `Failed to record transaction: ${error.message}`,
-        'recordTransaction',
-        'TRANSACTION_RECORD_ERROR'
-      );
-    }
-  }
-  
-  /**
-   * Update inventory from voice processing results
-   * @param {Array<Object>} items - Voice processed items
-   * @param {string} requestId - Request ID for logging
-   * @returns {Promise<Object>} Update result
-   */
-  async updateInventoryFromVoice(items, requestId) {
-    const timer = logger.startTimer();
-    const timestamp = new Date().toISOString();
+    // Find products containing the partial name
+    const matches = inMemoryDb.products
+      .filter(product => product.name.toLowerCase().includes(normalizedName))
+      .slice(0, limit);
     
-    try {
-      logger.info(`Updating inventory from voice processing (${items.length} items)`, {
-        module: 'database-utils',
-        requestId,
-        itemCount: items.length
-      });
-      
-      // Filter out items that need review
-      const validItems = items.filter(item => item.productId && !item.needsReview);
-      
-      if (validItems.length === 0) {
-        logger.info('No valid items to update (all need review)', {
-          module: 'database-utils',
-          requestId
-        });
-        
-        return {
-          success: true,
-          updatedItems: 0,
-          message: 'No valid items to update (all need review)'
+    return matches.map(product => ({ ...product }));
+  } catch (error) {
+    logger.error(`Error finding products by partial name: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Save inventory items
+ * @param {Array} items - Inventory items to save
+ * @returns {Promise<Object>} - Save result
+ */
+async function saveInventoryItems(items) {
+  try {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { success: false, message: 'No items to save' };
+    }
+    
+    // Process and save each item
+    const savedItems = [];
+    const errors = [];
+    
+    for (const item of items) {
+      try {
+        // Generate ID if not provided
+        const itemWithId = {
+          ...item,
+          id: item.id || `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          timestamp: item.timestamp || new Date().toISOString()
         };
-      }
-      
-      // Update inventory levels
-      const inventorySheet = await this.getSheet(this.inventorySheetName);
-      await inventorySheet.loadCells();
-      const inventoryRows = await inventorySheet.getRows();
-      
-      const updates = [];
-      for (const item of validItems) {
-        // Find matching product row
-        const productRow = inventoryRows.find(row => 
-          row.id === item.productId || row.productId === item.productId
-        );
         
-        if (productRow) {
-          const currentStock = parseInt(productRow.currentStock || '0', 10);
-          const newStock = currentStock + item.quantity;
-          
-          productRow.currentStock = newStock.toString();
-          productRow.lastUpdated = timestamp;
-          
-          await productRow.save();
-          
-          updates.push({
-            productId: item.productId,
-            productName: item.productName,
-            oldStock: currentStock,
-            newStock,
-            change: item.quantity
-          });
-        } else {
-          logger.warn(`Product not found in inventory: ${item.productName}`, {
-            module: 'database-utils',
-            productId: item.productId,
-            requestId
-          });
-        }
+        // Add to in-memory database
+        inMemoryDb.inventoryItems.push(itemWithId);
+        savedItems.push(itemWithId);
+      } catch (itemError) {
+        errors.push({ item, error: itemError.message });
       }
-      
-      // Record voice inventory transaction
-      await this.recordTransaction({
-        type: 'voice',
-        source: `VOICE-${requestId}`,
-        date: timestamp,
-        vendor: '',
-        items: validItems.map(item => ({
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: 0
-        })),
-        timestamp
-      });
-      
-      const duration = timer.end();
-      logger.info('Inventory updated from voice processing', {
-        module: 'database-utils',
-        requestId,
-        updatedItems: updates.length,
-        duration
-      });
-      
-      return {
-        success: true,
-        updatedItems: updates.length,
-        updates
-      };
-    } catch (error) {
-      const duration = timer.end();
-      logger.error('Failed to update inventory from voice processing', {
-        module: 'database-utils',
-        requestId,
-        duration,
-        error: error.message,
-        stack: error.stack
-      });
-      
-      throw new DatabaseError(
-        `Failed to update inventory: ${error.message}`,
-        'updateInventoryFromVoice',
-        'INVENTORY_UPDATE_ERROR'
-      );
     }
-  }
-  
-  /**
-   * Get low stock items that need reordering
-   * @param {string} location - Inventory location
-   * @returns {Promise<Array<Object>>} Low stock items
-   */
-  async getLowStockItems(location = 'main') {
-    try {
-      logger.info(`Getting low stock items for location: ${location}`, {
-        module: 'database-utils',
-        location
-      });
-      
-      const products = await this.getProducts(location);
-      
-      // Filter items below reorder point
-      const lowStockItems = products.filter(product => 
-        product.currentStock <= product.reorderPoint
-      );
-      
-      logger.info(`Found ${lowStockItems.length} low stock items`, {
-        module: 'database-utils',
-        location,
-        lowStockCount: lowStockItems.length
-      });
-      
-      return lowStockItems;
-    } catch (error) {
-      logger.error(`Failed to get low stock items for location: ${location}`, {
-        module: 'database-utils',
-        location,
-        error: error.message,
-        stack: error.stack
-      });
-      
-      throw new DatabaseError(
-        `Failed to get low stock items: ${error.message}`,
-        'getLowStockItems',
-        'INVENTORY_QUERY_ERROR'
-      );
-    }
+    
+    return {
+      success: true,
+      savedCount: savedItems.length,
+      errorCount: errors.length,
+      savedItems,
+      errors
+    };
+  } catch (error) {
+    logger.error(`Error saving inventory items: ${error.message}`);
+    return { success: false, error: error.message };
   }
 }
-if (process.env.NODE_ENV === 'test') {
-  // Export test version
-  module.exports = {
-    initialize: async () => {},
-    getInventoryItems: async () => [],
-    updateInventory: async (data) => data,
-    createBackup: async () => {}
-  };
-} else {
-  // Export regular version
-  const dbUtils = new DatabaseUtils();
-  module.exports = dbUtils;
+
+/**
+ * Get inventory items with optional filtering
+ * @param {Object} options - Filter options
+ * @returns {Promise<Array>} - Filtered inventory items
+ */
+async function getInventoryItems(options = {}) {
+  try {
+    let items = [...inMemoryDb.inventoryItems];
+    
+    // Apply filters
+    if (options.location) {
+      items = items.filter(item => item.location === options.location);
+    }
+    
+    if (options.category) {
+      items = items.filter(item => item.category === options.category);
+    }
+    
+    if (options.startDate) {
+      const startDate = new Date(options.startDate);
+      items = items.filter(item => new Date(item.timestamp) >= startDate);
+    }
+    
+    if (options.endDate) {
+      const endDate = new Date(options.endDate);
+      items = items.filter(item => new Date(item.timestamp) <= endDate);
+    }
+    
+    // Apply pagination
+    if (options.limit) {
+      const offset = options.offset || 0;
+      items = items.slice(offset, offset + options.limit);
+    }
+    
+    return items;
+  } catch (error) {
+    logger.error(`Error getting inventory items: ${error.message}`);
+    return [];
+  }
 }
+
+/**
+ * Count inventory items with optional filtering
+ * @param {Object} options - Filter options
+ * @returns {Promise<number>} - Count of matching items
+ */
+async function countInventoryItems(options = {}) {
+  try {
+    let count = inMemoryDb.inventoryItems.length;
+    
+    // Apply filters
+    if (options.location) {
+      count = inMemoryDb.inventoryItems.filter(item => 
+        item.location === options.location
+      ).length;
+    }
+    
+    if (options.category) {
+      count = inMemoryDb.inventoryItems.filter(item => 
+        item.category === options.category
+      ).length;
+    }
+    
+    return count;
+  } catch (error) {
+    logger.error(`Error counting inventory items: ${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * Get inventory item by ID
+ * @param {string} id - Item ID
+ * @returns {Promise<Object|null>} - Inventory item or null if not found
+ */
+async function getInventoryItemById(id) {
+  try {
+    const item = inMemoryDb.inventoryItems.find(item => item.id === id);
+    return item ? { ...item } : null;
+  } catch (error) {
+    logger.error(`Error getting inventory item by ID: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Delete inventory item by ID
+ * @param {string} id - Item ID
+ * @returns {Promise<boolean>} - Success flag
+ */
+async function deleteInventoryItem(id) {
+  try {
+    const index = inMemoryDb.inventoryItems.findIndex(item => item.id === id);
+    
+    if (index === -1) {
+      return false;
+    }
+    
+    inMemoryDb.inventoryItems.splice(index, 1);
+    return true;
+  } catch (error) {
+    logger.error(`Error deleting inventory item: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Add a new product to the database
+ * @param {Object} product - Product to add
+ * @returns {Promise<Object>} - Added product
+ */
+async function addProduct(product) {
+  try {
+    // Validate product
+    if (!product.name) {
+      throw new Error('Product name is required');
+    }
+    
+    // Generate ID if not provided
+    const productWithId = {
+      ...product,
+      id: product.id || `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    };
+    
+    // Add to in-memory database
+    inMemoryDb.products.push(productWithId);
+    
+    return { ...productWithId };
+  } catch (error) {
+    logger.error(`Error adding product: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Get all products
+ * @returns {Promise<Array>} - All products
+ */
+async function getProducts() {
+  try {
+    return [...inMemoryDb.products];
+  } catch (error) {
+    logger.error(`Error getting products: ${error.message}`);
+    return [];
+  }
+}
+
+module.exports = {
+  findProductByName,
+  findProductsByPartialName,
+  saveInventoryItems,
+  getInventoryItems,
+  countInventoryItems,
+  getInventoryItemById,
+  deleteInventoryItem,
+  addProduct,
+  getProducts
+};

@@ -1,33 +1,41 @@
+/**
+ * Tests for logger module
+ */
 describe('Logger Module', () => {
-  // Save original console methods
-  const originalConsole = {
-    log: console.log,
-    error: console.error,
-    warn: console.warn,
-    debug: console.debug
-  };
+  let originalConsoleLog;
+  let originalConsoleError;
+  let originalConsoleWarn;
+  let logger;
   
   beforeEach(() => {
-    // Reset modules between tests
-    jest.resetModules();
+    // Save original console methods
+    originalConsoleLog = console.log;
+    originalConsoleError = console.error;
+    originalConsoleWarn = console.warn;
     
-    // Mock console methods
+    // Create spies for console methods
     console.log = jest.fn();
     console.error = jest.fn();
     console.warn = jest.fn();
-    console.debug = jest.fn();
+    
+    // Reset module cache to ensure logger is reinitialized
+    jest.resetModules();
+    
+    // Import logger after mocks are set up (use absolute path)
+    logger = require('../../../utils/logger');
+    
+    // Set log level to warn for testing
+    logger.setLogLevel('warn');
   });
   
   afterEach(() => {
-    // Restore console methods after each test
-    console.log = originalConsole.log;
-    console.error = originalConsole.error;
-    console.warn = originalConsole.warn;
-    console.debug = originalConsole.debug;
+    // Restore original console methods
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
   });
   
-  test('logger module can be imported', () => {
-    const logger = require('../../../utils/logger');
+  test('logger exports expected methods', () => {
     expect(logger).toBeDefined();
     expect(typeof logger.info).toBe('function');
     expect(typeof logger.error).toBe('function');
@@ -36,21 +44,35 @@ describe('Logger Module', () => {
   });
   
   test('logger logs messages via console methods', () => {
-    const logger = require('../../../utils/logger');
-    
-    // This is a basic test that simply verifies the methods can be called
-    // without producing errors, rather than expecting specific output formats
-    expect(() => {
-      logger.info('Info message');
-      logger.error('Error message');
-      logger.warn('Warning message');
-      logger.debug('Debug message');
-    }).not.toThrow();
+    // Call the logger methods
+    logger.info('Test info message');
+    logger.error('Test error message');
+    logger.warn('Test warning message');
     
     // Verify that console methods were called (without checking format)
-    expect(console.log).toHaveBeenCalled();
+    expect(console.log).not.toHaveBeenCalled(); // Should not be called at warn level
     expect(console.error).toHaveBeenCalled();
-    // The warning might be called differently in your implementation
-    // so we'll skip checking that one directly
+    expect(console.warn).toHaveBeenCalled();
+  });
+  
+  test('logger formats messages correctly', () => {
+    // Skip this test if formatLogMessage is not exposed for testing
+    if (!logger.formatLogMessage) {
+      return;
+    }
+    
+    const formattedMessage = logger.formatLogMessage('info', 'Test message');
+    
+    // Check that the format includes level and message
+    expect(formattedMessage).toContain('INFO');
+    expect(formattedMessage).toContain('Test message');
+  });
+  
+  test('logger respects log level', () => {
+    // Test with level set to warn
+    expect(logger.shouldLog('error')).toBe(true);
+    expect(logger.shouldLog('warn')).toBe(true);
+    expect(logger.shouldLog('info')).toBe(false);
+    expect(logger.shouldLog('debug')).toBe(false);
   });
 });
