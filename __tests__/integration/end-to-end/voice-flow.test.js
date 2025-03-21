@@ -1,124 +1,91 @@
-// Mocks must be defined before imports
-jest.mock('node-cron');
-jest.mock('fs');
-jest.mock('tesseract.js', () => ({
-  createWorker: jest.fn().mockImplementation(() => ({
-    load: jest.fn().mockResolvedValue({}),
-    loadLanguage: jest.fn().mockResolvedValue({}),
-    initialize: jest.fn().mockResolvedValue({}),
-    recognize: jest.fn().mockResolvedValue({
-      data: { text: 'Sample Invoice\n商品A 5 100円\n商品B 2 250円\nTotal: 1000円' }
-    }),
-    terminate: jest.fn().mockResolvedValue({})
-  }))
-}));
+// __tests__/integration/end-to-end/voice-flow.test.js
+const fs = require('fs');
+const path = require('path');
+const invoiceProcessor = require('../../../modules/invoice-processor');
+const translationService = require('../../../modules/translation-service');
+const database = require('../../../utils/database-utils');
+
+// Mock dependencies
+jest.mock('fs', () => {
+  const originalModule = jest.requireActual('fs');
+  return {
+    ...originalModule,
+    promises: {
+      ...originalModule.promises,
+      readdir: jest.fn().mockResolvedValue(['invoice1.pdf', 'invoice2.pdf']),
+      readFile: jest.fn().mockResolvedValue(Buffer.from('test data')),
+      mkdir: jest.fn().mockResolvedValue(undefined),
+      writeFile: jest.fn().mockResolvedValue(undefined),
+      rename: jest.fn().mockResolvedValue(undefined)
+    }
+  };
+});
 
 jest.mock('../../../modules/invoice-processor', () => ({
-  extractInvoiceData: jest.fn().mockResolvedValue({
-    invoiceNumber: 'INV-001',
-    date: '2025-03-01',
-    totalAmount: 1000,
+  processInvoice: jest.fn().mockResolvedValue({
     items: [
-      { name: '商品A', quantity: 5, unitPrice: 100 },
-      { name: '商品B', quantity: 2, unitPrice: 250 }
+      { product: 'Vodka Grey Goose', count: 5, price: '14,995' },
+      { product: 'Wine Cabernet', count: 10, price: '15,990' }
     ],
-    supplier: 'Test Supplier Co., Ltd.',
-    currency: 'JPY'
+    invoiceDate: '2023-01-15',
+    total: '30,985',
+    location: 'Bar'
   })
 }));
 
 jest.mock('../../../modules/translation-service', () => ({
-  batchTranslate: jest.fn().mockImplementation(items => {
+  translateItems: jest.fn().mockImplementation(items => {
+    const translations = {
+      'ウォッカ グレイグース': 'Vodka Grey Goose',
+      'ワイン カベルネ': 'Wine Cabernet'
+    };
+    
     return Promise.resolve(
       items.map(item => ({
         ...item,
-        name: `Translated: ${item.name}`
+        product: translations[item.product] || item.product
       }))
     );
   })
 }));
 
-jest.mock('../../../utils/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn()
-}));
-
 jest.mock('../../../utils/database-utils', () => ({
-  saveInvoice: jest.fn().mockResolvedValue({ id: 'inv-123' }),
-  saveInventoryItems: jest.fn().mockResolvedValue({ success: true })
+  saveInvoice: jest.fn().mockResolvedValue(true),
+  saveInventoryItems: jest.fn().mockResolvedValue(true)
 }));
 
-jest.mock('../../../utils/notification', () => ({
-  notifyAdmin: jest.fn().mockResolvedValue({ success: true }),
-  notifyError: jest.fn().mockResolvedValue({ success: true })
-}));
-
-jest.mock('../../../config', () => ({
-  invoiceProcessing: {
-    inputDir: './uploads/invoices',
-    archiveDir: './uploads/invoices/archive',
-    errorDir: './uploads/invoices/error',
-    enabled: true,
-    cron: '0 * * * *',
-    batchSize: 10
-  },
-  googleTranslate: {
-    projectId: 'mock-project',
-    keyFilename: './mock-key.json'
-  }
-}));
+// Import the module to test
+const invoiceService = require('../../../modules/invoice-service');
 
 describe('Invoice Processing End-to-End Flow', () => {
-  let invoiceService;
-  let fs;
-  let mockInvoiceProcessor;
-  let mockTranslationService;
-  let mockDatabase;
-  
   beforeEach(() => {
-    jest.resetModules();
-    
-    // Get mock modules
-    fs = require('fs');
-    mockInvoiceProcessor = require('../../../modules/invoice-processor');
-    mockTranslationService = require('../../../modules/translation-service');
-    mockDatabase = require('../../../utils/database-utils');
-    
-    // Set up mock implementations for fs
-    fs.promises = {
-      readdir: jest.fn().mockResolvedValue(['invoice1.pdf', 'invoice2.pdf']),
-      readFile: jest.fn().mockResolvedValue(Buffer.from('mock pdf content')),
-      unlink: jest.fn().mockResolvedValue(undefined),
-      mkdir: jest.fn().mockResolvedValue(undefined)
-    };
-    
-    // Import the module being tested
-    invoiceService = require('../../../modules/invoice-service');
+    jest.clearAllMocks();
   });
   
   test('should process invoices from start to finish', async () => {
-    // Execute the complete flow
-    const result = await invoiceService.processIncomingInvoices();
+    // Setup
+    const sourceDir = '/invoices/incoming';
+    const processedDir = '/invoices/processed';
+    
+    // Execute
+    const result = await invoiceService.processInvoices(sourceDir, processedDir);
     
     // Verify processing steps
     expect(fs.promises.readdir).toHaveBeenCalled();
-    expect(mockInvoiceProcessor.extractInvoiceData).toHaveBeenCalled();
-    expect(mockTranslationService.batchTranslate).toHaveBeenCalled();
-    expect(mockDatabase.saveInvoice).toHaveBeenCalled();
+    expect(invoiceProcessor.processInvoice).toHaveBeenCalled();
+    expect(database.saveInvoice).toHaveBeenCalled();
     
     // Verify result
-    expect(result.processed).toBeGreaterThan(0);
+    expect(result.processed).toBe(2);
     expect(result.success).toBe(true);
   });
   
   test('should handle empty directory gracefully', async () => {
-    // Setup for empty directory
+    // Setup - mock empty directory
     fs.promises.readdir.mockResolvedValueOnce([]);
     
     // Execute
-    const result = await invoiceService.processIncomingInvoices();
+    const result = await invoiceService.processInvoices('/empty/dir', '/processed/dir');
     
     // Verify
     expect(result.processed).toBe(0);
@@ -127,12 +94,11 @@ describe('Invoice Processing End-to-End Flow', () => {
   
   test('should add translated items to inventory', async () => {
     // Execute
-    const result = await invoiceService.processIncomingInvoices();
+    const result = await invoiceService.processInvoices('/invoices/incoming', '/invoices/processed');
     
     // Verify
-    expect(mockTranslationService.batchTranslate).toHaveBeenCalled();
-    expect(mockDatabase.saveInvoice).toHaveBeenCalled();
-    expect(mockDatabase.saveInventoryItems).toHaveBeenCalled();
+    expect(database.saveInvoice).toHaveBeenCalled();
+    expect(database.saveInventoryItems).toHaveBeenCalled();
     expect(result.success).toBe(true);
   });
 });

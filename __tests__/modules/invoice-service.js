@@ -41,9 +41,9 @@ async function processInvoices(sourceDir, processedDir) {
       const processedPath = path.join(processedDir, file);
       
       try {
-        // Process the invoice - Use processInvoice instead of calling processSingleInvoice directly
+        // Process the invoice
         logger.info(`Processing invoice: ${file}`);
-        const result = await invoiceProcessor.processInvoice(filePath, 'Bar');
+        const result = await processSingleInvoice(filePath, 'Bar'); // Default location
         
         // Save invoice data to database
         await dbUtils.saveInvoice({
@@ -99,11 +99,14 @@ async function processInvoices(sourceDir, processedDir) {
  */
 async function processSingleInvoice(filePath, location) {
   try {
-    // Use processInvoice from invoiceProcessor instead of extractInvoiceData to match the test expectations
-    const invoiceData = await invoiceProcessor.processInvoice(filePath, location);
+    // Extract invoice data using OCR
+    const invoiceData = await invoiceProcessor.extractInvoiceData(filePath);
+    
+    // Translate items from Japanese to English/French
+    const translatedItems = await translationService.translateItems(invoiceData.items);
     
     // Check if products exist in database and add if needed
-    for (const item of invoiceData.items) {
+    for (const item of translatedItems) {
       const existingProduct = await dbUtils.findProductByName(item.product);
       
       if (!existingProduct) {
@@ -124,14 +127,17 @@ async function processSingleInvoice(filePath, location) {
     }
     
     // Return the processed invoice data
-    return invoiceData;
+    return {
+      ...invoiceData,
+      items: translatedItems,
+      location
+    };
   } catch (error) {
     logger.error(`Error processing invoice ${filePath}: ${error.message}`);
     throw error;
   }
 }
 
-// Export the functions
 module.exports = {
   processInvoices,
   processSingleInvoice

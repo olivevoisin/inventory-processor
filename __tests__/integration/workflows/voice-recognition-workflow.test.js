@@ -1,119 +1,78 @@
-// Mock the file system
-jest.mock('fs', () => ({
-  promises: {
-    readFile: jest.fn().mockResolvedValue(Buffer.from('mock audio content')),
-    writeFile: jest.fn().mockResolvedValue(undefined),
-    mkdir: jest.fn().mockResolvedValue(undefined),
-    unlink: jest.fn().mockResolvedValue(undefined)
-  },
-  createReadStream: jest.fn().mockReturnValue({
-    pipe: jest.fn().mockReturnThis(),
-    on: jest.fn((event, callback) => {
-      if (event === 'end') callback();
-      return this;
-    })
+// __tests__/integration/workflows/voice-recognition-workflow.test.js
+const path = require('path');
+const fs = require('fs').promises;
+const voiceProcessor = require('../../../modules/voice-processor');
+const dbUtils = require('../../../utils/database-utils');
+const logger = require('../../../utils/logger');
+
+// Sample test data
+const sampleVoiceFile = path.join('__fixtures__', 'test-voice.mp3');
+const sampleLocation = 'Bar';
+const sampleTranscript = 'Ten bottles of vodka grey goose and 5 bottles of wine cabernet';
+
+// Mock the modules
+jest.mock('../../../modules/voice-processor', () => ({
+  transcribeAudio: jest.fn().mockResolvedValue({
+    transcript: sampleTranscript,
+    confidence: 0.95
   }),
-  existsSync: jest.fn().mockReturnValue(true)
-}));
-
-// Mock Deepgram for voice recognition
-jest.mock('@deepgram/sdk', () => ({
-  Deepgram: jest.fn().mockImplementation(() => ({
-    transcription: {
-      preRecorded: jest.fn().mockImplementation(() => ({
-        transcribe: jest.fn().mockResolvedValue({
-          results: {
-            channels: [{
-              alternatives: [{
-                transcript: "five bottles of wine and three cans of beer",
-                confidence: 0.95
-              }]
-            }]
-          }
-        })
-      }))
+  extractInventoryItems: jest.fn().mockImplementation((transcript) => {
+    // Simple extraction logic for testing
+    const items = [];
+    
+    if (transcript.includes('vodka')) {
+      items.push({ text: 'vodka grey goose', count: 10 });
     }
-  }))
+    
+    if (transcript.includes('wine')) {
+      items.push({ text: 'wine cabernet', count: 5 });
+    }
+    
+    return items;
+  })
 }));
 
-// Mock database operations
 jest.mock('../../../utils/database-utils', () => ({
   findProductByName: jest.fn().mockImplementation((name) => {
     const products = {
-      'wine': { id: 'prod-1', name: 'Wine', unit: 'bottle', price: 15 },
-      'beer': { id: 'prod-2', name: 'Beer', unit: 'can', price: 5 }
+      'vodka grey goose': { id: 1, name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99' },
+      'wine cabernet': { id: 2, name: 'Wine Cabernet', unit: 'bottle', price: '15.99' }
     };
-    return Promise.resolve(products[name.toLowerCase()] || null);
+    
+    // Simulate fuzzy matching
+    for (const [key, product] of Object.entries(products)) {
+      if (key.includes(name.toLowerCase()) || name.toLowerCase().includes(key)) {
+        return Promise.resolve(product);
+      }
+    }
+    
+    return Promise.resolve(null);
   }),
-  saveInventoryItems: jest.fn().mockResolvedValue({ success: true, updatedCount: 2 }),
-  getInventoryHistory: jest.fn().mockResolvedValue([
-    { timestamp: '2025-03-01T10:00:00Z', items: [{ name: 'Wine', quantity: 5 }] }
-  ])
-}), { virtual: true });
-
-// Mock config
-jest.mock('../../../config', () => ({
-  deepgram: {
-    apiKey: 'mock-api-key'
-  },
-  uploads: {
-    voiceDir: './uploads/voice'
-  },
-  googleSheets: {
-    apiKey: 'mock-api-key',
-    sheetId: 'mock-sheet-id',
-    docId: 'mock-doc-id',
-    clientEmail: 'mock-client-email',
-    privateKey: 'mock-private-key'
-  }
+  saveInventoryItems: jest.fn().mockResolvedValue(true),
+  saveUnknownItems: jest.fn().mockResolvedValue(true)
 }));
 
-// Mock logger
 jest.mock('../../../utils/logger', () => ({
   info: jest.fn(),
   error: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn()
-}), { virtual: true });
+}));
+
+// The actual workflow module to test
+const voiceWorkflow = require('../../../modules/voice-workflow');
 
 describe('Voice Recognition and Inventory Update Workflow', () => {
-  let voiceProcessor;
-  let dbUtils;
-  let logger;
-  
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Reset modules to ensure clean state
-    jest.resetModules();
-    
-    // Load mocked modules
-    dbUtils = require('../../../utils/database-utils');
-    logger = require('../../../utils/logger');
-    
-    // Import the module after mocks are set up
-    try {
-      voiceProcessor = require('../../../modules/voice-processor');
-    } catch (error) {
-      console.error('Error loading voice-processor module:', error.message);
-    }
   });
   
   test('complete voice recognition workflow processes audio to inventory updates', async () => {
-    // Skip if module doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.processAudio !== 'function') {
-      console.warn('Skipping test: processAudio method not available');
-      return;
-    }
-    
-    // 1. Process the audio file
-    const result = await voiceProcessor.processAudio('./uploads/voice/recording.wav');
+    // 1. Process the voice file
+    const result = await voiceWorkflow.processVoiceRecording(sampleVoiceFile, sampleLocation);
     
     // 2. Verify audio was transcribed
-    expect(result).toBeDefined();
-    expect(result).toHaveProperty('transcript');
-    expect(result.transcript).toContain('wine');
-    expect(result.transcript).toContain('beer');
+    expect(voiceProcessor.transcribeAudio).toHaveBeenCalledWith(sampleVoiceFile);
     
     // 3. Verify products were identified from the transcript
     expect(dbUtils.findProductByName).toHaveBeenCalled();
@@ -121,51 +80,72 @@ describe('Voice Recognition and Inventory Update Workflow', () => {
     // 4. Verify inventory was updated with the recognized items
     expect(dbUtils.saveInventoryItems).toHaveBeenCalled();
     
-    // 5. Check that the process was logged
-    expect(logger.info).toHaveBeenCalled();
+    // 5. Verify result structure
+    expect(result).toHaveProperty('success', true);
+    expect(result).toHaveProperty('recognizedItems');
+    expect(result.recognizedItems).toHaveLength(2);
+    expect(result.recognizedItems[0]).toHaveProperty('product', 'Vodka Grey Goose');
+    expect(result.recognizedItems[0]).toHaveProperty('count', 10);
   });
   
   test('handles unknown products gracefully', async () => {
-    // Skip if module doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.processAudio !== 'function') {
-      console.warn('Skipping test: processAudio method not available');
-      return;
-    }
+    // 1. Mock the extractInventoryItems to include an unknown product
+    voiceProcessor.extractInventoryItems.mockReturnValueOnce([
+      { text: 'vodka grey goose', count: 10 },
+      { text: 'unknown product', count: 3 }
+    ]);
     
-    // 1. Override the mock to simulate an unknown product
-    dbUtils.findProductByName.mockResolvedValueOnce(null);
+    // 2. Mock the database to not find the unknown product
+    dbUtils.findProductByName.mockImplementation((name) => {
+      if (name.includes('unknown')) {
+        return Promise.resolve(null);
+      }
+      
+      return Promise.resolve({
+        id: 1,
+        name: 'Vodka Grey Goose',
+        unit: 'bottle',
+        price: '29.99'
+      });
+    });
     
-    // 2. Process the audio file
-    const result = await voiceProcessor.processAudio('./uploads/voice/recording.wav');
-    
-    // 3. Verify the workflow continues even with unknown products
-    expect(result).toBeDefined();
+    // 3. Process the voice file
+    const result = await voiceWorkflow.processVoiceRecording(sampleVoiceFile, sampleLocation);
     
     // 4. Verify the error is logged
     expect(logger.warn).toHaveBeenCalled();
   });
   
   test('handles transcription errors gracefully', async () => {
-    // Skip if module doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.processAudio !== 'function') {
-      console.warn('Skipping test: processAudio method not available');
-      return;
-    }
+    // 1. Mock a transcription error
+    voiceProcessor.transcribeAudio.mockRejectedValueOnce(new Error('Transcription failed'));
     
-    // 1. Override the Deepgram mock to simulate a transcription error
-    const Deepgram = require('@deepgram/sdk').Deepgram;
-    const mockTranscriptionInstance = Deepgram.mock.results[0].value.transcription;
-    mockTranscriptionInstance.preRecorded.mockImplementationOnce(() => ({
-      transcribe: jest.fn().mockRejectedValueOnce(new Error('Transcription failed'))
-    }));
+    // 2. Process the voice file and expect an error
+    await expect(
+      voiceWorkflow.processVoiceRecording(sampleVoiceFile, sampleLocation)
+    ).rejects.toThrow('Transcription failed');
     
-    // 2. Process the audio file with expected failure
-    try {
-      await voiceProcessor.processAudio('./uploads/voice/recording.wav');
-    } catch (error) {
-      // 3. Verify the error is caught and logged
-      expect(error).toBeDefined();
-      expect(logger.error).toHaveBeenCalled();
-    }
+    // 3. Verify the error is logged
+    expect(logger.error).toHaveBeenCalled();
+    
+    // 4. Verify no database operations were performed
+    expect(dbUtils.saveInventoryItems).not.toHaveBeenCalled();
+  });
+  
+  test('handles empty transcripts gracefully', async () => {
+    // 1. Mock an empty transcript
+    voiceProcessor.transcribeAudio.mockResolvedValueOnce({
+      transcript: '',
+      confidence: 0
+    });
+    
+    // 2. Process the voice file
+    const result = await voiceWorkflow.processVoiceRecording(sampleVoiceFile, sampleLocation);
+    
+    // 3. Verify the result
+    expect(result).toHaveProperty('success', true);
+    expect(result).toHaveProperty('recognizedItems');
+    expect(result.recognizedItems).toHaveLength(0);
+    expect(result).toHaveProperty('warning', 'No inventory items could be recognized');
   });
 });
