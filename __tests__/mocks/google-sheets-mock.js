@@ -3,64 +3,56 @@
  * Provides mock implementations for Google Sheets API
  */
 
+const sheetsMock = {
+  mockSheet: {
+    addRows: jest.fn().mockResolvedValue([]),
+    getRows: jest.fn().mockResolvedValue([]),
+    setHeaderRow: jest.fn().mockResolvedValue({}),
+    headerValues: [],
+    title: 'Mock Sheet'
+  },
+  
+  mockDoc: {
+    sheetsByTitle: {},
+    sheetsById: {},
+    loadInfo: jest.fn().mockResolvedValue({}),
+    addSheet: jest.fn().mockImplementation((options) => {
+      const newSheet = { ...sheetsMock.mockSheet, title: options.title };
+      sheetsMock.mockDoc.sheetsByTitle[options.title] = newSheet;
+      return Promise.resolve(newSheet);
+    }),
+    useApiKey: jest.fn(),
+    useServiceAccountAuth: jest.fn().mockResolvedValue({}),
+  }
+};
+
+/**
+ * Setup a mock for GoogleSpreadsheet
+ * @returns {Object} Mock implementation
+ */
 function setupGoogleSheetsMock() {
-  // Create mock row object
-  const createMockRow = (data) => ({
-    ...data,
-    save: jest.fn().mockResolvedValue({}),
-    delete: jest.fn().mockResolvedValue({})
+  // Initialize sheets by title for each test
+  sheetsMock.mockDoc.sheetsByTitle = {
+    'Products': { ...sheetsMock.mockSheet, title: 'Products' },
+    'Inventory': { ...sheetsMock.mockSheet, title: 'Inventory' },
+    'Locations': { ...sheetsMock.mockSheet, title: 'Locations' }
+  };
+  
+  // Initialize sheets by ID
+  sheetsMock.mockDoc.sheetsById = {
+    0: sheetsMock.mockDoc.sheetsByTitle['Products'],
+    1: sheetsMock.mockDoc.sheetsByTitle['Inventory'],
+    2: sheetsMock.mockDoc.sheetsByTitle['Locations']
+  };
+  
+  // Create mock constructor
+  const GoogleSpreadsheet = jest.fn().mockImplementation(() => {
+    return sheetsMock.mockDoc;
   });
   
-  // Create mock rows
-  const mockRows = [
-    createMockRow({ sku: 'SKU-001', quantity: 10, location: 'A1', lastUpdated: '2023-10-01', price: 100 }),
-    createMockRow({ sku: 'SKU-002', quantity: 5, location: 'B2', lastUpdated: '2023-10-02', price: 200 })
-  ];
-  
-  // Create mock sheet
-  const mockInventorySheet = {
-    getRows: jest.fn().mockResolvedValue(mockRows),
-    addRow: jest.fn().mockImplementation((rowData) => {
-      const newRow = createMockRow(rowData);
-      mockRows.push(newRow);
-      return Promise.resolve(newRow);
-    }),
-    _rows: mockRows
-  };
-  
-  // Create mock doc
-  const mockDoc = {
-    title: 'Test Inventory Spreadsheet',
-    _id: 'mock-spreadsheet-id',
-    sheetsByTitle: {
-      'Inventory': mockInventorySheet
-    },
-    loadInfo: jest.fn().mockResolvedValue({}),
-    addSheet: jest.fn().mockImplementation(({ title }) => {
-      mockDoc.sheetsByTitle[title] = {
-        getRows: jest.fn().mockResolvedValue([]),
-        addRow: jest.fn().mockResolvedValue({}),
-        _rows: []
-      };
-      return Promise.resolve(mockDoc.sheetsByTitle[title]);
-    })
-  };
-  
-  // Mock auth client
-  const mockAuthClient = {
-    authorize: jest.fn().mockResolvedValue({}),
-    setCredentials: jest.fn()
-  };
-  
-  // Mock auth
-  const mockAuth = {
-    getClient: jest.fn().mockResolvedValue(mockAuthClient)
-  };
-  
   return {
-    mockDoc,
-    mockAuth,
-    mockRows
+    GoogleSpreadsheet,
+    sheetsMock
   };
 }
 

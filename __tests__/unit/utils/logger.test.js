@@ -1,78 +1,100 @@
 /**
- * Tests for logger module
+ * Logger Test
  */
-describe('Logger Module', () => {
-  let originalConsoleLog;
-  let originalConsoleError;
-  let originalConsoleWarn;
-  let logger;
-  
+
+const mockConsole = {
+  log: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  info: jest.fn()
+};
+
+// Save original console methods before mocking
+const originalConsole = { ...console };
+
+// Mock the console object
+global.console = {
+  ...console,
+  ...mockConsole
+};
+
+// Mock environment for testing
+let originalEnv;
+let logger;
+
+describe('Logger', () => {
   beforeEach(() => {
-    // Save original console methods
-    originalConsoleLog = console.log;
-    originalConsoleError = console.error;
-    originalConsoleWarn = console.warn;
+    // Save original environment
+    originalEnv = { ...process.env };
     
-    // Create spies for console methods
-    console.log = jest.fn();
-    console.error = jest.fn();
-    console.warn = jest.fn();
-    
-    // Reset module cache to ensure logger is reinitialized
+    // Reset mock calls
     jest.resetModules();
+    
+    // Make sure NODE_ENV is not 'test' for the main test cases
+    process.env.NODE_ENV = 'development';
     
     // Import logger after mocks are set up (use absolute path)
     logger = require('../../../utils/logger');
-    
-    // Set log level to warn for testing
-    logger.setLogLevel('warn');
   });
   
   afterEach(() => {
-    // Restore original console methods
-    console.log = originalConsoleLog;
-    console.error = originalConsoleError;
-    console.warn = originalConsoleWarn;
-  });
-  
-  test('logger exports expected methods', () => {
-    expect(logger).toBeDefined();
-    expect(typeof logger.info).toBe('function');
-    expect(typeof logger.error).toBe('function');
-    expect(typeof logger.warn).toBe('function');
-    expect(typeof logger.debug).toBe('function');
-  });
-  
-  test('logger logs messages via console methods', () => {
-    // Call the logger methods
-    logger.info('Test info message');
-    logger.error('Test error message');
-    logger.warn('Test warning message');
+    // Restore environment
+    process.env = originalEnv;
     
-    // Verify that console methods were called (without checking format)
-    expect(console.log).not.toHaveBeenCalled(); // Should not be called at warn level
-    expect(console.error).toHaveBeenCalled();
-    expect(console.warn).toHaveBeenCalled();
+    // Clear all mocks
+    jest.clearAllMocks();
   });
   
-  test('logger formats messages correctly', () => {
-    // Skip this test if formatLogMessage is not exposed for testing
-    if (!logger.formatLogMessage) {
-      return;
-    }
-    
-    const formattedMessage = logger.formatLogMessage('info', 'Test message');
-    
-    // Check that the format includes level and message
-    expect(formattedMessage).toContain('INFO');
-    expect(formattedMessage).toContain('Test message');
+  afterAll(() => {
+    // Restore original console
+    global.console = originalConsole;
   });
   
-  test('logger respects log level', () => {
-    // Test with level set to warn
-    expect(logger.shouldLog('error')).toBe(true);
-    expect(logger.shouldLog('warn')).toBe(true);
-    expect(logger.shouldLog('info')).toBe(false);
-    expect(logger.shouldLog('debug')).toBe(false);
+  test('info should call console.log', () => {
+    logger.info('test message');
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('test message'));
+  });
+  
+  test('error should call console.error', () => {
+    logger.error('test error');
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('test error'));
+  });
+  
+  test('warn should call console.warn', () => {
+    logger.warn('test warning');
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('test warning'));
+  });
+  
+  test('debug should call console.debug in debug mode', () => {
+    process.env.DEBUG = 'true';
+    logger.debug('test debug');
+    expect(console.debug).toHaveBeenCalledWith(expect.stringContaining('test debug'));
+  });
+  
+  test('debug should not call console.debug when not in debug mode', () => {
+    delete process.env.DEBUG;
+    logger.debug('test debug');
+    expect(console.debug).not.toHaveBeenCalled();
+  });
+  
+  test('should not log in test environment', () => {
+    // Now set NODE_ENV to 'test'
+    process.env.NODE_ENV = 'test';
+    
+    // Re-import logger to ensure it picks up the new environment
+    jest.resetModules();
+    const testLogger = require('../../../utils/logger');
+    
+    // Clear any previous calls
+    jest.clearAllMocks();
+    
+    testLogger.info('test in test env');
+    testLogger.error('error in test env');
+    testLogger.warn('warn in test env');
+    
+    expect(console.log).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });
