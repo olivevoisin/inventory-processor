@@ -1,109 +1,82 @@
 /**
- * Inventory Routes
+ * Inventory management API endpoints
  */
 const express = require('express');
 const router = express.Router();
 const dbUtils = require('../utils/database-utils');
+const { authenticateApiKey } = require('../middleware/auth');
+const { validateRequestBody } = require('../middleware/validation');
 const logger = require('../utils/logger');
+const monitoring = require('../utils/monitoring');
 
-// Get all inventory data
-router.get('/', async (req, res) => {
+/**
+ * @route GET /api/inventory/products
+ * @desc Get all products
+ * @access Protected
+ */
+router.get('/products', authenticateApiKey, async (req, res) => {
   try {
-    const { location, startDate, endDate } = req.query;
+    monitoring.recordApiUsage('getProducts');
+    logger.info('Request for all products');
     
-    // In a real implementation, this would query the database
-    // with proper filtering
-    const inventoryData = await dbUtils.getInventory(location, startDate, endDate);
-    
-    res.status(200).json({
-      success: true,
-      data: inventoryData
-    });
+    const products = await dbUtils.getProducts();
+    return res.status(200).json(products);
   } catch (error) {
-    logger.error(`Get inventory error: ${error.message}`);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    logger.error(`Error getting products: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to retrieve products' });
   }
 });
 
-// Get all products
-router.get('/products', async (req, res) => {
+/**
+ * @route GET /api/inventory
+ * @desc Get inventory by location
+ * @access Protected
+ */
+router.get('/', authenticateApiKey, async (req, res) => {
   try {
     const { location } = req.query;
     
-    const products = await dbUtils.getProducts(location);
+    if (!location) {
+      return res.status(400).json({ error: 'Location parameter is required' });
+    }
     
-    res.status(200).json({
-      success: true,
-      data: products
-    });
+    monitoring.recordApiUsage('getInventory');
+    logger.info(`Request for inventory at location: ${location}`);
+    
+    const inventory = await dbUtils.getInventoryByLocation(location);
+    return res.status(200).json(inventory);
   } catch (error) {
-    logger.error(`Get products error: ${error.message}`);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    logger.error(`Error getting inventory: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to retrieve inventory' });
   }
 });
 
-// Add a new product
-router.post('/products', async (req, res) => {
-  try {
-    const productData = req.body;
-    
-    if (!productData.name || !productData.unit) {
-      return res.status(400).json({
-        success: false,
-        error: 'Product name and unit are required'
-      });
+/**
+ * @route POST /api/inventory
+ * @desc Update inventory items
+ * @access Protected
+ */
+router.post('/', 
+  authenticateApiKey, 
+  validateRequestBody(['productId', 'quantity', 'location']),
+  async (req, res) => {
+    try {
+      const inventoryItems = req.body;
+      
+      if (!Array.isArray(inventoryItems)) {
+        return res.status(400).json({ error: 'Request body must be an array of inventory items' });
+      }
+      
+      monitoring.recordApiUsage('updateInventory');
+      logger.info(`Request to update ${inventoryItems.length} inventory items`);
+      
+      const result = await dbUtils.saveInventoryItems(inventoryItems);
+      return res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      logger.error(`Error updating inventory: ${error.message}`);
+      return res.status(500).json({ error: 'Failed to update inventory' });
     }
-    
-    const result = await dbUtils.addProduct(productData);
-    
-    res.status(201).json({
-      success: true,
-      data: result
-    });
-  } catch (error) {
-    logger.error(`Add product error: ${error.message}`);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
-});
-
-// Add inventory data
-router.post('/', async (req, res) => {
-  try {
-    const inventoryData = req.body;
-    
-    if (!inventoryData.location || !inventoryData.items) {
-      return res.status(400).json({
-        success: false,
-        error: 'Location and items are required'
-      });
-    }
-    
-    const result = await dbUtils.saveInventoryItems(inventoryData);
-    
-    res.status(201).json({
-      success: true,
-      data: result
-    });
-  } catch (error) {
-    logger.error(`Add inventory error: ${error.message}`);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+);
 
 module.exports = router;

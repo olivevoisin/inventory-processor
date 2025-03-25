@@ -1,108 +1,69 @@
 /**
- * Voice Processing Routes
+ * Voice processing API endpoints
  */
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs').promises;
-const voiceWorkflow = require('../modules/voice-workflow');
+const fs = require('fs');
+const voiceProcessor = require('../modules/voice-processor');
+const dbUtils = require('../utils/database-utils');
+const { authenticateApiKey } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const monitoring = require('../utils/monitoring');
+const config = require('../config');
 
-// Set up file storage
+// Configure multer storage
 const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '..', 'uploads', 'voice');
+  destination: function(req, file, cb) {
+    const uploadDir = config.uploads.voiceDir || './uploads/voice';
     
-    try {
-      await fs.mkdir(uploadDir, { recursive: true });
-      cb(null, uploadDir);
-    } catch (err) {
-      cb(err);
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
+    
+    cb(null, uploadDir);
   },
-  filename: (req, file, cb) => {
-    const timestamp = new Date().toISOString().replace(/:/g, '-');
-    cb(null, `${timestamp}-${file.originalname}`);
+  filename: function(req, file, cb) {
+    cb(null, `recording-${Date.now()}${path.extname(file.originalname)}`);
   }
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.mp3', '.wav', '.m4a', '.ogg'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    
-    if (allowedTypes.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only audio files are allowed.'));
-    }
-  }
-});
+const upload = multer({ storage });
 
-// Process a voice recording
-router.post('/process', upload.single('file'), async (req, res) => {
+/**
+ * @route POST /api/voice/process
+ * @desc Process voice recording to update inventory
+ * @access Protected
+ */
+router.post('/process', authenticateApiKey, upload.single('audioFile'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No file uploaded'
-      });
+      return res.status(400).json({ error: 'No audio file provided' });
     }
     
-    const location = req.body.location;
+    monitoring.recordApiUsage('processVoice');
+    logger.info(`Processing voice file: ${req.file.filename}`);
     
-    if (!location) {
-      return res.status(400).json({
-        success: false,
-        error: 'Location is required'
-      });
+    // Process the audio file
+    const result = await voiceProcessor.processAudio(req.file.path);
+    
+    // Update inventory if items were identified
+    if (result.items && result.items.length > 0) {
+      await dbUtils.saveInventoryItems(result.items);
+      logger.info(`Updated inventory with ${result.items.length} items from voice recording`);
     }
     
-    const result = await voiceWorkflow.processVoiceRecording(req.file.path, location);
-    
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      result
+      transcript: result.transcript,
+      confidence: result.confidence,
+      items: result.items
     });
   } catch (error) {
-    logger.error(`Voice processing error: ${error.message}`);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Get status of a voice processing job
-router.get('/status', async (req, res) => {
-  try {
-    const jobId = req.query.jobId;
-    
-    if (!jobId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Job ID is required'
-      });
-    }
-    
-    // In a real implementation, this would query a job status database
-    // For now, we'll just return a mock response
-    res.status(200).json({
-      success: true,
-      status: 'completed',
-      jobId
-    });
-  } catch (error) {
-    logger.error(`Status check error: ${error.message}`);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    logger.error(`Error processing voice recording: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to process voice recording' });
   }
 });
 

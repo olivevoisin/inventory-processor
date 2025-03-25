@@ -3,185 +3,196 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inventory Management System</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <title data-i18n="appTitle">Inventory Management System</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="container-fluid">
-    <div class="row">
-      <!-- Sidebar -->
-      <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse">
-        <div class="position-sticky pt-3">
-          <ul class="nav flex-column">
-            <li class="nav-item">
-              <a class="nav-link active" data-bs-toggle="tab" href="#dashboard">
-                Dashboard
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" data-bs-toggle="tab" href="#voice-recording">
-                Voice Recording
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" data-bs-toggle="tab" href="#invoices">
-                Invoices
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" data-bs-toggle="tab" href="#inventory">
-                Inventory
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" data-bs-toggle="tab" href="#products">
-                Products
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" data-bs-toggle="tab" href="#reports">
-                Reports
-              </a>
-            </li>
-          </ul>
-        </div>
-      </nav>
-
-      <!-- Main content -->
-      <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-        <div class="tab-content" id="content">
-          <!-- Dashboard -->
-          <div class="tab-pane fade show active" id="dashboard">
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-              <h1 class="h2">Dashboard</h1>
-            </div>
-            <div class="row">
-              <div class="col-md-4 mb-4">
-                <div class="card">
-                  <div class="card-body">
-                    <h5 class="card-title">Total Products</h5>
-                    <h1 class="display-4" id="total-products">--</h1>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-4 mb-4">
-                <div class="card">
-                  <div class="card-body">
-                    <h5 class="card-title">Inventory Items</h5>
-                    <h1 class="display-4" id="inventory-items">--</h1>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-4 mb-4">
-                <div class="card">
-                  <div class="card-body">
-                    <h5 class="card-title">Processed Invoices</h5>
-                    <h1 class="display-4" id="processed-invoices">--</h1>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Rest of the tab panes remain the same -->
-          <!-- Voice Recording -->
-          <div class="tab-pane fade" id="voice-recording">
-            <!-- Voice recording content -->
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-              <h1 class="h2">Voice Recording</h1>
-            </div>
-            <!-- Rest of voice recording content -->
-          </div>
-
-          <!-- Invoices -->
-          <div class="tab-pane fade" id="invoices">
-            <!-- Invoices content -->
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-              <h1 class="h2">Invoice Processing</h1>
-            </div>
-            <!-- Rest of invoices content -->
-          </div>
-
-          <!-- Inventory -->
-          <div class="tab-pane fade" id="inventory">
-            <!-- Inventory content -->
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-              <h1 class="h2">Inventory</h1>
-            </div>
-            <!-- Rest of inventory content -->
-          </div>
-
-          <!-- Products -->
-          <div class="tab-pane fade" id="products">
-            <!-- Products content -->
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-              <h1 class="h2">Products</h1>
-            </div>
-            <!-- Rest of products content -->
-          </div>
-
-          <!-- Reports -->
-          <div class="tab-pane fade" id="reports">
-            <!-- Reports content -->
-            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-              <h1 class="h2">Reports</h1>
-            </div>
-            <!-- Rest of reports content -->
-          </div>
-        </div>
-      </main>
+  <header>
+    <div class="container">
+      <h1 data-i18n="appTitle">Inventory Management System</h1>
+      <div class="language-switcher">
+        <select id="language-selector">
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+        </select>
+      </div>
     </div>
-  </div>
-
-  <!-- Include Bootstrap JavaScript -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+  </header>
   
-  <!-- Custom JavaScript -->
-  <script>
-    // Initialize tabs manually
-    document.addEventListener('DOMContentLoaded', function() {
-      // Setup tab functionality
-      const tabLinks = document.querySelectorAll('[data-bs-toggle="tab"]');
-      
-      tabLinks.forEach(tabLink => {
-        tabLink.addEventListener('click', function(event) {
-          event.preventDefault();
-          
-          // Hide all tab panes
-          const tabPanes = document.querySelectorAll('.tab-pane');
-          tabPanes.forEach(pane => {
-            pane.classList.remove('show', 'active');
-          });
-          
-          // Remove active class from all nav links
-          tabLinks.forEach(link => {
-            link.classList.remove('active');
-          });
-          
-          // Add active class to clicked nav link
-          this.classList.add('active');
-          
-          // Show the target tab pane
-          const target = document.querySelector(this.getAttribute('href'));
-          if (target) {
-            target.classList.add('show', 'active');
-          }
-        });
-      });
-      
-      // Handle URL hash for direct tab access
-      const hash = window.location.hash;
-      if (hash) {
-        const tabLink = document.querySelector(`[href="${hash}"]`);
-        if (tabLink) {
-          tabLink.click();
-        }
-      }
-    });
-  </script>
+  <nav>
+    <div class="container">
+      <ul class="tabs">
+        <li><a href="#" class="tab-link active" data-tab="dashboard" data-i18n="dashboard">Dashboard</a></li>
+        <li><a href="#" class="tab-link" data-tab="voice" data-i18n="voiceProcessing">Voice Processing</a></li>
+        <li><a href="#" class="tab-link" data-tab="invoice" data-i18n="invoiceProcessing">Invoice Processing</a></li>
+        <li><a href="#" class="tab-link" data-tab="inventory" data-i18n="inventory">Inventory</a></li>
+        <li><a href="#" class="tab-link" data-tab="settings" data-i18n="settings">Settings</a></li>
+      </ul>
+    </div>
+  </nav>
   
-  <!-- Include your app.js -->
-  <script src="app.js"></script>
+  <main class="container">
+    <div id="global-error" class="error-message" style="display: none;"></div>
+    
+    <!-- Dashboard Tab -->
+    <div id="dashboard-tab" class="tab-content">
+      <h2 data-i18n="dashboard">Dashboard</h2>
+      <div class="dashboard-widgets">
+        <div class="widget">
+          <h3 data-i18n="inventorySummary">Inventory Summary</h3>
+          <div id="inventory-summary" class="loading">
+            <p data-i18n="loading">Loading...</p>
+          </div>
+        </div>
+        <div class="widget">
+          <h3 data-i18n="recentActivity">Recent Activity</h3>
+          <div id="recent-activity" class="loading">
+            <p data-i18n="loading">Loading...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Voice Processing Tab -->
+    <div id="voice-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="voiceProcessing">Voice Processing</h2>
+      <div class="upload-section">
+        <form id="voice-upload-form" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="voice-file" data-i18n="selectVoiceFile">Select Voice Recording</label>
+            <input type="file" id="voice-file" name="voiceFile" accept="audio/*" required>
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="upload">Upload</button>
+          </div>
+        </form>
+        <div id="voice-upload-status" class="status-message"></div>
+      </div>
+      <div class="voice-instructions">
+        <h3 data-i18n="voiceInstructions">Voice Recording Instructions</h3>
+        <ol>
+          <li data-i18n="voiceInstruction1">Record inventory changes clearly</li>
+          <li data-i18n="voiceInstruction2">Include product IDs when possible</li>
+          <li data-i18n="voiceInstruction3">Specify quantities and locations clearly</li>
+          <li data-i18n="voiceInstruction4">Upload the recording using the form above</li>
+        </ol>
+      </div>
+    </div>
+    
+    <!-- Invoice Processing Tab -->
+    <div id="invoice-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="invoiceProcessing">Invoice Processing</h2>
+      <div class="upload-section">
+        <form id="invoice-upload-form" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="invoice-file" data-i18n="selectInvoiceFile">Select Invoice File</label>
+            <input type="file" id="invoice-file" name="invoiceFile" accept=".pdf,.jpg,.jpeg,.png" required>
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="upload">Upload</button>
+          </div>
+        </form>
+        <div id="invoice-upload-status" class="status-message"></div>
+      </div>
+    </div>
+    
+    <!-- Inventory Tab -->
+    <div id="inventory-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="inventory">Inventory</h2>
+      <div class="inventory-actions">
+        <button id="refresh-inventory" data-i18n="refreshInventory">Refresh Inventory</button>
+        <button id="add-item-button" data-i18n="addItem">Add Item</button>
+      </div>
+      <div id="inventory-list" class="loading">
+        <p data-i18n="loading">Loading...</p>
+      </div>
+      
+      <!-- Add/Edit Item Modal -->
+      <div id="item-modal" class="modal">
+        <div class="modal-content">
+          <span class="close">&times;</span>
+          <h3 id="modal-title" data-i18n="addItem">Add Item</h3>
+          <form id="item-form">
+            <input type="hidden" id="item-id">
+            <div class="form-group">
+              <label for="product-id" data-i18n="productId">Product ID</label>
+              <input type="text" id="product-id" name="productId" required>
+            </div>
+            <div class="form-group">
+              <label for="product-name" data-i18n="productName">Product Name</label>
+              <input type="text" id="product-name" name="name" required>
+            </div>
+            <div class="form-group">
+              <label for="quantity" data-i18n="quantity">Quantity</label>
+              <input type="number" id="quantity" name="quantity" min="0" required>
+            </div>
+            <div class="form-group">
+              <label for="location" data-i18n="location">Location</label>
+              <input type="text" id="location" name="location">
+            </div>
+            <div class="form-group">
+              <button type="submit" data-i18n="save">Save</button>
+              <button type="button" id="cancel-button" data-i18n="cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings Tab -->
+    <div id="settings-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="settings">Settings</h2>
+      
+      <!-- Google Apps Script Settings -->
+      <div class="settings-section">
+        <h3 data-i18n="googleAppsSettings">Google Apps Script Settings</h3>
+        <form id="google-apps-settings-form">
+          <div class="form-group">
+            <label for="api-endpoint" data-i18n="apiEndpoint">API Endpoint</label>
+            <input type="url" id="api-endpoint" name="apiEndpoint">
+          </div>
+          <div class="form-group">
+            <label for="api-key" data-i18n="apiKey">API Key</label>
+            <input type="password" id="api-key" name="apiKey">
+          </div>
+          <div class="form-group">
+            <label for="spreadsheet-id" data-i18n="spreadsheetId">Spreadsheet ID</label>
+            <input type="text" id="spreadsheet-id" name="spreadsheetId">
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="saveSettings">Save Settings</button>
+            <button type="button" id="test-connection-button" data-i18n="testConnection">Test Connection</button>
+          </div>
+        </form>
+        <div id="connection-status" class="status-message"></div>
+      </div>
+      
+      <!-- App Settings -->
+      <div class="settings-section">
+        <h3 data-i18n="appSettings">Application Settings</h3>
+        <form id="app-settings-form">
+          <div class="form-group">
+            <label for="theme-select" data-i18n="theme">Theme</label>
+            <select id="theme-select" name="theme">
+              <option value="light" data-i18n="themeLight">Light</option>
+              <option value="dark" data-i18n="themeDark">Dark</option>
+              <option value="system" data-i18n="themeSystem">System Default</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="saveSettings">Save Settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+  
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 <span data-i18n="appTitle">Inventory Management System</span></p>
+    </div>
+  </footer>
+  
+  <script src="/app.js"></script>
 </body>
 </html>

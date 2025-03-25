@@ -42,6 +42,34 @@ const upload = multer({
   }
 });
 
+// Get specific invoice by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    
+    // In a real implementation, this would fetch from database
+    res.status(200).json({
+      success: true,
+      data: {
+        id: invoiceId,
+        date: '2023-01-15',
+        total: '30,985',
+        items: [
+          { product: 'Vodka Grey Goose', count: 5, price: '14,995' },
+          { product: 'Wine Cabernet', count: 10, price: '15,990' }
+        ]
+      }
+    });
+  } catch (error) {
+    logger.error(`Error getting invoice: ${error.message}`);
+    
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Process a single invoice
 router.post('/process', upload.single('file'), async (req, res) => {
   try {
