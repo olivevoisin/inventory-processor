@@ -1,85 +1,79 @@
-// middleware/common.js
-
+/**
+ * Middleware commun pour l'application
+ */
 const logger = require('../utils/logger');
 const monitoring = require('../utils/monitoring');
-const { ValidationError } = require('../utils/error-handler');
 
 /**
- * Middleware to track API calls
+ * Middleware pour suivre les appels API
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction next
  */
-const trackApiCall = (req, res, next) => {
+function trackApiCall(req, res, next) {
   const endpoint = req.originalUrl || req.url;
   const method = req.method;
   
+  // Enregistrer l'appel API
   monitoring.trackApiCall(endpoint, method);
   
-  // Add performance tracking
+  // Ajouter l'heure de début pour mesurer la durée
   req.startTime = Date.now();
   
-  // Track response time on finish
+  // Surveiller la réponse
   res.on('finish', () => {
+    // Calculer la durée
     const duration = Date.now() - req.startTime;
-    monitoring.trackResponseTime(endpoint, duration);
     
-    // Track errors for non-success status codes
+    // Journaliser l'appel API
+    logger.info(`${method} ${endpoint} ${res.statusCode} (${duration}ms)`, {
+      method,
+      endpoint,
+      statusCode: res.statusCode,
+      duration
+    });
+    
+    // Si c'est une erreur, la suivre
     if (res.statusCode >= 400) {
       monitoring.trackError(endpoint, res.statusCode);
     }
   });
   
   next();
-};
+}
 
 /**
- * Middleware to validate request payload against schema
- * @param {Function} validationFn - Validation function that returns errors
+ * Middleware pour standardiser les réponses JSON
+ * @param {Object} req - Requête Express
+ * @param {Object} res - Réponse Express
+ * @param {Function} next - Fonction next
  */
-const validateRequest = (validationFn) => {
-  return (req, res, next) => {
-    const errors = validationFn(req);
-    
-    if (errors && errors.length > 0) {
-      const fields = errors.map(e => e.field);
-      const message = errors.map(e => e.message).join(', ');
-      
-      next(new ValidationError(message, fields, 'VALIDATION_ERROR'));
-    } else {
-      next();
-    }
-  };
-};
-
-/**
- * Middleware to standardize successful responses
- */
-const standardizeResponse = (req, res, next) => {
-  // Store the original json method
+function standardizeResponse(req, res, next) {
+  // Sauvegarder la méthode json d'origine
   const originalJson = res.json;
   
-  // Override the json method
+  // Remplacer par notre version standardisée
   res.json = function(data) {
-    // If the response is already in the standard format, don't modify it
-    if (data && (data.success !== undefined || data.status !== undefined)) {
+    // Si la réponse est déjà standardisée, la laisser telle quelle
+    if (data && data.success !== undefined) {
       return originalJson.call(this, data);
     }
     
-    // Standardize the response format
+    // Sinon, créer une réponse standardisée
     const standardResponse = {
       success: true,
-      data: data,
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId
+      data,
+      timestamp: new Date().toISOString()
     };
     
-    // Call the original json method with the standardized response
+    // Utiliser la méthode d'origine avec notre format standardisé
     return originalJson.call(this, standardResponse);
   };
   
   next();
-};
+}
 
 module.exports = {
   trackApiCall,
-  validateRequest,
   standardizeResponse
 };

@@ -1,5 +1,7 @@
+const baseConfig = require('./jest.config');
+
 module.exports = {
-    ...require('./jest.config'),
-    testMatch: ['**/__tests__/unit/**/*.test.js'],
-    collectCoverage: true
-  };
+  ...baseConfig,
+  testMatch: ['**/__tests__/unit/**/*.test.js'],
+  collectCoverage: true
+};

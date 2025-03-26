@@ -1,172 +1,165 @@
-// utils/database-utils.js
+/**
+ * Utilitaires de base de données
+ * Gère les opérations de base de données pour l'inventaire
+ */
 const logger = require('./logger');
+const config = require('../config');
+
+// Base de données simulée pour les tests
+const mockDB = {
+  products: [
+    { id: 'prod1', name: 'Vin Rouge', unit: 'bouteille', price: 15.99, location: 'Bar' },
+    { id: 'prod2', name: 'Vin Blanc', unit: 'bouteille', price: 14.99, location: 'Bar' },
+    { id: 'prod3', name: 'Vodka Grey Goose', unit: 'bouteille', price: 35.99, location: 'Bar' },
+    { id: 'prod4', name: 'Bière Blonde', unit: 'cannette', price: 2.99, location: 'Bar' },
+    { id: 'prod5', name: 'Whisky', unit: 'bouteille', price: 25.99, location: 'Bar' },
+    { id: 'prod6', name: 'Farine', unit: 'kg', price: 1.99, location: 'Cuisine' },
+    { id: 'prod7', name: 'Sucre', unit: 'kg', price: 1.49, location: 'Cuisine' },
+    { id: 'prod8', name: 'Tomates', unit: 'kg', price: 3.99, location: 'Cuisine' }
+  ],
+  inventory: [],
+  invoices: []
+};
 
 /**
- * Find a product by name with fuzzy matching
- * @param {string} name - Product name to search for
- * @returns {Promise<Object|null>} - Found product or null
+ * Recherche un produit par son nom
+ * @param {string} name - Nom du produit à rechercher
+ * @returns {Promise<Object|null>} - Produit trouvé ou null
  */
 async function findProductByName(name) {
-  logger.info(`Searching for product: ${name}`);
+  logger.info(`Recherche de produit par nom: ${name}`);
   
-  // Handle test case
-  if (name.toLowerCase() === 'wine') {
-    return { id: 2, name: 'Wine', unit: 'bottle', price: '15.99' };
-  }
+  if (!name) return null;
   
-  // In a real implementation, this would query a database
-  // For testing, we'll return mock products for known names
-  const products = {
-    'vodka': { id: 1, name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99' },
-    'wine': { id: 2, name: 'Wine Cabernet', unit: 'bottle', price: '15.99' },
-    'gin': { id: 3, name: 'Gin Bombay', unit: 'bottle', price: '24.99' }
-  };
+  // Normaliser le nom pour la recherche
+  const searchName = name.toLowerCase();
   
-  // Simple fuzzy matching
-  const lowercaseName = name.toLowerCase();
+  // Recherche approximative
+  const product = mockDB.products.find(p => 
+    p.name.toLowerCase().includes(searchName) || 
+    searchName.includes(p.name.toLowerCase())
+  );
   
-  for (const [key, product] of Object.entries(products)) {
-    if (key.includes(lowercaseName) || lowercaseName.includes(key)) {
-      return product;
-    }
-  }
-  
-  return null;
+  return product || null;
 }
 
 /**
- * Save inventory items to the database
- * @param {Object} data - Inventory data to save
- * @returns {Promise<boolean>} - Success indicator
+ * Sauvegarde des articles d'inventaire
+ * @param {Object} data - Données d'inventaire
+ * @returns {Promise<Object>} - Résultat de la sauvegarde
  */
 async function saveInventoryItems(data) {
-  // Ensure data.items exists with a valid length property
-  const items = data && data.items ? data.items : [];
-  const location = data && data.location ? data.location : 'unknown';
+  // S'assurer que data a la bonne structure
+  const items = Array.isArray(data) ? data : (data.items || []);
+  const location = data.location || 'Bar';
+  const date = data.date || new Date().toISOString().split('T')[0];
   
-  logger.info(`Saving inventory data for ${location}: ${items.length} items`);
+  logger.info(`Sauvegarde de ${items.length} articles d'inventaire pour ${location} (${date})`);
   
-  // In a real implementation, this would save to a database
-  return true;
-}
-
-/**
- * Save unknown items for later review
- * @param {Object} data - Data about unrecognized items
- * @returns {Promise<boolean>} - Success indicator
- */
-async function saveUnknownItems(data) {
-  // Ensure data.items exists with a valid length property
-  const items = data && data.items ? data.items : [];
-  const location = data && data.location ? data.location : 'unknown';
+  // Ajouter les articles à la base de données simulée
+  for (const item of items) {
+    const inventoryItem = {
+      id: `inv-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      date,
+      location,
+      productId: item.productId || null,
+      productName: item.name || item.productName || item.product,
+      quantity: item.quantity || item.count || 0,
+      unit: item.unit || 'unité',
+      timestamp: new Date().toISOString()
+    };
+    
+    mockDB.inventory.push(inventoryItem);
+  }
   
-  logger.info(`Saving unrecognized items for ${location}: ${items.length} items`);
-  
-  // In a real implementation, this would save to a database
-  return true;
-}
-
-/**
- * Save invoice data to the database
- * @param {Object} invoice - Invoice data to save
- * @returns {Promise<boolean>} - Success indicator
- */
-async function saveInvoice(invoice) {
-  // For test case, return an object with ID
   return {
-    id: 'INV-' + Date.now(),
     success: true,
+    savedCount: items.length,
     timestamp: new Date().toISOString()
   };
 }
 
 /**
- * Add a new product to the database
- * @param {Object} product - Product data to add
- * @returns {Promise<boolean>} - Success indicator
+ * Sauvegarde une facture
+ * @param {Object} invoice - Données de la facture
+ * @returns {Promise<Object>} - Facture sauvegardée avec ID
+ */
+async function saveInvoice(invoice) {
+  logger.info(`Sauvegarde de la facture: ${invoice.invoiceId || 'nouvelle'}`);
+  
+  const savedInvoice = {
+    id: invoice.id || `inv-${Date.now()}`,
+    invoiceId: invoice.invoiceId || `INV-${Date.now()}`,
+    date: invoice.date || new Date().toISOString().split('T')[0],
+    supplier: invoice.supplier || 'Fournisseur inconnu',
+    items: invoice.items || [],
+    total: invoice.total || '0',
+    location: invoice.location || 'Bar',
+    timestamp: new Date().toISOString()
+  };
+  
+  mockDB.invoices.push(savedInvoice);
+  
+  return savedInvoice;
+}
+
+/**
+ * Ajoute un nouveau produit
+ * @param {Object} product - Données du produit
+ * @returns {Promise<Object>} - Produit ajouté avec ID
  */
 async function addProduct(product) {
-  logger.info(`Adding new product: ${product.name}`);
+  logger.info(`Ajout d'un nouveau produit: ${product.name}`);
   
-  // In a real implementation, this would save to a database
-  return true;
+  const newProduct = {
+    id: product.id || `prod-${Date.now()}`,
+    name: product.name,
+    unit: product.unit || 'unité',
+    price: product.price || 0,
+    location: product.location || 'Bar',
+    timestamp: new Date().toISOString()
+  };
+  
+  mockDB.products.push(newProduct);
+  
+  return newProduct;
 }
 
 /**
- * Get all products
- * @param {string} location - Optional location filter
- * @returns {Promise<Array>} - List of products
+ * Récupère tous les produits
+ * @param {string} location - Filtre optionnel par emplacement
+ * @returns {Promise<Array>} - Liste des produits
  */
 async function getProducts(location) {
-  logger.info(`Getting products${location ? ` for ${location}` : ''}`);
-  
-  // In a real implementation, this would query a database
-  const products = [
-    { name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99', location: 'Bar' },
-    { name: 'Wine Cabernet', unit: 'bottle', price: '15.99', location: 'Bar' },
-    { name: 'Gin Bombay', unit: 'bottle', price: '24.99', location: 'Bar' },
-    { name: 'Whiskey Jack Daniels', unit: 'bottle', price: '27.99', location: 'Bar' },
-    { name: 'Rum Bacardi', unit: 'bottle', price: '19.99', location: 'Bar' },
-    { name: 'Tomatoes', unit: 'kg', price: '2.99', location: 'Kitchen' },
-    { name: 'Onions', unit: 'kg', price: '1.99', location: 'Kitchen' },
-    { name: 'Garlic', unit: 'kg', price: '3.99', location: 'Kitchen' }
-  ];
+  logger.info(`Récupération des produits${location ? ` pour ${location}` : ''}`);
   
   if (location) {
-    return products.filter(product => product.location === location);
+    return mockDB.products.filter(p => p.location === location);
   }
   
-  return products;
+  return [...mockDB.products];
 }
 
 /**
- * Get inventory data
- * @param {string} location - Optional location filter
- * @param {string} startDate - Optional start date filter
- * @param {string} endDate - Optional end date filter
- * @returns {Promise<Array>} - List of inventory items
+ * Récupère l'inventaire par emplacement
+ * @param {string} location - Emplacement à filtrer
+ * @returns {Promise<Array>} - Articles d'inventaire
  */
-async function getInventory(location, startDate, endDate) {
-  logger.info(`Getting inventory data with filters: location=${location || 'all'}, startDate=${startDate || 'none'}, endDate=${endDate || 'none'}`);
+async function getInventoryByLocation(location) {
+  logger.info(`Récupération de l'inventaire pour l'emplacement: ${location}`);
   
-  // In a real implementation, this would query a database
-  const inventoryItems = [
-    { date: '2023-01-01', location: 'Bar', product: 'Vodka Grey Goose', count: 10, unit: 'bottle' },
-    { date: '2023-01-01', location: 'Bar', product: 'Wine Cabernet', count: 15, unit: 'bottle' },
-    { date: '2023-01-15', location: 'Bar', product: 'Vodka Grey Goose', count: 8, unit: 'bottle' },
-    { date: '2023-01-15', location: 'Bar', product: 'Wine Cabernet', count: 12, unit: 'bottle' },
-    { date: '2023-01-30', location: 'Bar', product: 'Vodka Grey Goose', count: 5, unit: 'bottle' },
-    { date: '2023-01-30', location: 'Bar', product: 'Wine Cabernet', count: 8, unit: 'bottle' },
-    { date: '2023-01-01', location: 'Kitchen', product: 'Tomatoes', count: 5, unit: 'kg' },
-    { date: '2023-01-01', location: 'Kitchen', product: 'Onions', count: 3, unit: 'kg' },
-    { date: '2023-01-15', location: 'Kitchen', product: 'Tomatoes', count: 3, unit: 'kg' },
-    { date: '2023-01-15', location: 'Kitchen', product: 'Onions', count: 2, unit: 'kg' }
-  ];
-  
-  // Apply filters
-  let filteredItems = [...inventoryItems];
-  
-  if (location) {
-    filteredItems = filteredItems.filter(item => item.location === location);
+  if (!location) {
+    return mockDB.inventory;
   }
   
-  if (startDate) {
-    filteredItems = filteredItems.filter(item => item.date >= startDate);
-  }
-  
-  if (endDate) {
-    filteredItems = filteredItems.filter(item => item.date <= endDate);
-  }
-  
-  return filteredItems;
+  return mockDB.inventory.filter(item => item.location === location);
 }
 
 module.exports = {
   findProductByName,
   saveInventoryItems,
-  saveUnknownItems,
   saveInvoice,
   addProduct,
   getProducts,
-  getInventory
+  getInventoryByLocation
 };

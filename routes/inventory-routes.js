@@ -56,27 +56,39 @@ router.get('/', authenticateApiKey, async (req, res) => {
  * @desc Update inventory items
  * @access Protected
  */
-router.post('/', 
-  authenticateApiKey, 
-  validateRequestBody(['productId', 'quantity', 'location']),
-  async (req, res) => {
-    try {
-      const inventoryItems = req.body;
-      
-      if (!Array.isArray(inventoryItems)) {
-        return res.status(400).json({ error: 'Request body must be an array of inventory items' });
-      }
-      
-      monitoring.recordApiUsage('updateInventory');
-      logger.info(`Request to update ${inventoryItems.length} inventory items`);
-      
-      const result = await dbUtils.saveInventoryItems(inventoryItems);
-      return res.status(200).json({ success: true, ...result });
-    } catch (error) {
-      logger.error(`Error updating inventory: ${error.message}`);
-      return res.status(500).json({ error: 'Failed to update inventory' });
+router.post('/', authenticateApiKey, async (req, res) => {
+  try {
+    const inventoryItems = req.body;
+    
+    if (!Array.isArray(inventoryItems)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Request body must be an array of inventory items' 
+      });
     }
+    
+    // Validate each item in the array
+    for (const item of inventoryItems) {
+      if (!item.productId || !item.quantity || !item.location) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Each inventory item must have productId, quantity, and location' 
+        });
+      }
+    }
+    
+    monitoring.recordApiUsage('updateInventory');
+    logger.info(`Request to update ${inventoryItems.length} inventory items`);
+    
+    const result = await dbUtils.saveInventoryItems(inventoryItems);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    logger.error(`Error updating inventory: ${error.message}`);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update inventory' 
+    });
   }
-);
+});
 
 module.exports = router;

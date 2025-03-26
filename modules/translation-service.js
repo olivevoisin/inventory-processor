@@ -1,92 +1,96 @@
-// modules/translation-service.js
+/**
+ * Module de traduction
+ * Gère les traductions pour les produits et factures
+ */
 const logger = require('../utils/logger');
 
-// Cache for translations to reduce API calls
+// Cache pour stocker les traductions déjà effectuées
 const translationCache = new Map();
 
 /**
- * Translate text from one language to another
- * @param {string} text - Text to translate
- * @param {string} sourceLanguage - Source language (default: 'ja')
- * @param {string} targetLanguage - Target language (default: 'en')
- * @returns {Promise<string>} - Translated text
+ * Traduit un texte d'une langue à une autre
+ * @param {string} text - Texte à traduire
+ * @param {string} sourceLanguage - Langue source
+ * @param {string} targetLanguage - Langue cible
+ * @returns {Promise<string>} - Texte traduit
  */
-async function translateText(text, sourceLanguage = 'ja', targetLanguage = 'en') {
-  // Check if we have this translation cached
+async function translate(text, sourceLanguage = 'fr', targetLanguage = 'en') {
+  // Vérifier si le texte est vide
+  if (!text || text.trim() === '') {
+    return text;
+  }
+  
+  // Si les langues source et cible sont identiques, retourner le texte original
+  if (sourceLanguage === targetLanguage) {
+    return text;
+  }
+  
+  // Clé pour le cache
   const cacheKey = `${sourceLanguage}:${targetLanguage}:${text}`;
+  
+  // Vérifier si la traduction est dans le cache
   if (translationCache.has(cacheKey)) {
     return translationCache.get(cacheKey);
   }
   
-  try {
-    logger.info(`Translating text from ${sourceLanguage} to ${targetLanguage}`);
-    
-    // In a real implementation, this would call the Google Translate API
-    // But for testing, we'll return mock translations for common Japanese inventory terms
-    const translations = {
-      'ウォッカ グレイグース': 'Vodka Grey Goose',
-      'ワイン カベルネ': 'Wine Cabernet',
-      'ジン ボンベイ': 'Gin Bombay',
-      'インボイス': 'Invoice',
-      '日付': 'Date',
-      'アイテム': 'Items',
-      '合計': 'Total'
-    };
-    
-    let translatedText = text;
-    Object.entries(translations).forEach(([japanese, english]) => {
-      translatedText = translatedText.replace(new RegExp(japanese, 'g'), english);
-    });
-    
-    // Cache the result
-    translationCache.set(cacheKey, translatedText);
-    
-    return translatedText;
-  } catch (error) {
-    logger.error(`Translation error: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * Translate an array of invoice items from Japanese to English
- * @param {Array<Object>} items - Array of invoice items
- * @returns {Promise<Array<Object>>} - Translated items
- */
-async function translateItems(items) {
-  logger.info(`Translating ${items.length} invoice items`);
+  // Dans une implémentation réelle, nous utiliserions une API de traduction
+  // Pour les tests, on simule une traduction
+  let translatedText = text;
   
-  try {
-    const translatedItems = [];
-    
-    for (const item of items) {
-      const translatedProduct = await translateText(item.product);
-      
-      translatedItems.push({
-        ...item,
-        product: translatedProduct
-      });
+  if (sourceLanguage === 'fr' && targetLanguage === 'en') {
+    translatedText = `[en] ${text}`;
+  } else if (sourceLanguage === 'jp' && targetLanguage === 'fr') {
+    // Simuler quelques traductions japonais -> français
+    if (text.includes('ウォッカ')) {
+      translatedText = 'Vodka Grey Goose';
+    } else if (text.includes('ワイン')) {
+      translatedText = 'Vin Cabernet';
+    } else {
+      translatedText = `[fr] ${text}`;
     }
-    
-    return translatedItems;
-  } catch (error) {
-    logger.error(`Error translating items: ${error.message}`);
-    throw error;
+  } else {
+    // Pour toute autre combinaison, on ajoute juste un préfixe
+    translatedText = `[${targetLanguage}] ${text}`;
   }
+  
+  // Stocker dans le cache
+  translationCache.set(cacheKey, translatedText);
+  
+  return translatedText;
 }
 
 /**
- * Batch translate a set of items in one call to reduce API calls
- * @param {Array<Object>} items - Array of items to translate
- * @returns {Promise<Array<Object>>} - Translated items
+ * Traduit plusieurs textes en batch
+ * @param {Array<string>} texts - Textes à traduire
+ * @param {string} sourceLanguage - Langue source
+ * @param {string} targetLanguage - Langue cible
+ * @returns {Promise<Array<string>>} - Textes traduits
  */
-async function batchTranslate(items) {
-  // For testing, we'll use the same logic as translateItems
-  return translateItems(items);
+async function batchTranslate(texts, sourceLanguage = 'fr', targetLanguage = 'en') {
+  // Vérifier si le tableau est vide
+  if (!texts || !Array.isArray(texts) || texts.length === 0) {
+    return [];
+  }
+  
+  // Si les langues source et cible sont identiques, retourner les textes originaux
+  if (sourceLanguage === targetLanguage) {
+    return [...texts];
+  }
+  
+  // Traduire chaque texte
+  const promises = texts.map(text => translate(text, sourceLanguage, targetLanguage));
+  return Promise.all(promises);
+}
+
+/**
+ * Effacer le cache de traduction
+ */
+function clearCache() {
+  translationCache.clear();
 }
 
 module.exports = {
-  translateText,
-  translateItems,
-  batchTranslate
+  translate,
+  batchTranslate,
+  clearCache
 };

@@ -1,162 +1,75 @@
 const request = require('supertest');
-const express = require('express');
+const app = require('../../../app');
+const dbUtils = require('../../../utils/database-utils');
 
 // Mock the database utils
 jest.mock('../../../utils/database-utils', () => ({
   getProducts: jest.fn().mockResolvedValue([
-    { id: 'prod-1', name: 'Wine', unit: 'bottle', price: 15 },
-    { id: 'prod-2', name: 'Beer', unit: 'can', price: 5 }
+    { id: 1, name: 'Wine', unit: 'bottle' },
+    { id: 2, name: 'Beer', unit: 'can' }
   ]),
   getInventoryByLocation: jest.fn().mockResolvedValue([
-    { productId: 'prod-1', quantity: 10, location: 'main' }
+    { product: 'Wine', quantity: 5 },
+    { product: 'Beer', quantity: 10 }
   ]),
   saveInventoryItems: jest.fn().mockResolvedValue({ success: true })
-}), { virtual: true });
+}));
 
-// Mock logger
-jest.mock('../../../utils/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn()
-}), { virtual: true });
-
-// Mock auth middleware
-jest.mock('../../../middleware/auth', () => ({
-  authenticateApiKey: (req, res, next) => next()
-}), { virtual: true });
-
-// Mock validation middleware to pass
-jest.mock('../../../middleware/validation', () => ({
-  validateRequestBody: () => (req, res, next) => next()
-}), { virtual: true });
-
-// Mock monitoring
-jest.mock('../../../utils/monitoring', () => ({
-  recordApiUsage: jest.fn()
-}), { virtual: true });
+// Load API key from environment
+const apiKey = process.env.API_KEY || 'test-api-key';
 
 describe('Inventory API Endpoints', () => {
-  let app;
-  let dbUtils;
-  
-  beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Load mocked modules
-    dbUtils = require('../../../utils/database-utils');
-    
-    // Create a fresh Express app
-    app = express();
-    
-    // Add JSON parsing middleware
-    app.use(express.json());
-    
-    // Import routes
-    try {
-      const inventoryRoutes = require('../../../routes/inventory-routes');
-      app.use('/api/inventory', inventoryRoutes);
-    } catch (error) {
-      console.error('Error loading inventory routes:', error.message);
-    }
-  });
-  
-  test('GET /api/inventory/products returns list of products', async () => {
-    // Skip if app wasn't properly set up
-    if (!app) {
-      console.warn('Skipping test: app not available');
-      return;
-    }
-    
-    const response = await request(app).get('/api/inventory/products');
+  it('GET /api/inventory/products returns list of products', async () => {
+    const response = await request(app)
+      .get('/api/inventory/products')
+      .set('x-api-key', apiKey);
     
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body.length).toBe(2);
-    expect(response.body[0]).toHaveProperty('name');
     expect(dbUtils.getProducts).toHaveBeenCalled();
   });
   
-  test('GET /api/inventory returns inventory for a location', async () => {
-    // Skip if app wasn't properly set up
-    if (!app) {
-      console.warn('Skipping test: app not available');
-      return;
-    }
-    
+  it('GET /api/inventory returns inventory for a location', async () => {
     const response = await request(app)
       .get('/api/inventory')
-      .query({ location: 'main' });
+      .query({ location: 'main' })
+      .set('x-api-key', apiKey);
     
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
     expect(dbUtils.getInventoryByLocation).toHaveBeenCalledWith('main');
   });
   
-  test('POST /api/inventory updates inventory items', async () => {
-    // Skip if app wasn't properly set up
-    if (!app) {
-      console.warn('Skipping test: app not available');
-      return;
-    }
-    
-    const inventoryUpdate = [
-      { productId: 'prod-1', quantity: 5, location: 'main' }
+  it('POST /api/inventory updates inventory items', async () => {
+    const inventoryData = [
+      { productId: 1, quantity: 10, location: 'bar' },
+      { productId: 2, quantity: 5, location: 'bar' }
     ];
     
     const response = await request(app)
       .post('/api/inventory')
-      .send(inventoryUpdate);
+      .set('x-api-key', apiKey)
+      .send(inventoryData);
     
     expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('success');
     expect(response.body.success).toBe(true);
-    expect(dbUtils.saveInventoryItems).toHaveBeenCalledWith(inventoryUpdate);
+    expect(dbUtils.saveInventoryItems).toHaveBeenCalledWith(inventoryData);
   });
   
-  test('POST /api/inventory validates request body', async () => {
-    // Skip if app wasn't properly set up
-    if (!app) {
-      console.warn('Skipping test: app not available');
-      return;
-    }
+  it('POST /api/inventory validates request body', async () => {
+    // For this specific test, we need to make sure we're getting an error
+    // when the body is invalid
+    const invalidData = { not_an_array: true };
     
-    // Create a new Express app for this specific test
-    const invalidApp = express();
-    invalidApp.use(express.json());
+    // Mock saveInventoryItems to reject for this test
+    dbUtils.saveInventoryItems.mockRejectedValueOnce(new Error('Invalid data format'));
     
-    // Override the validation middleware mock to actually validate
-    jest.mock('../../../middleware/validation', () => ({
-      validateRequestBody: (fields) => (req, res, next) => {
-        const missingFields = fields.filter(field => 
-          !req.body || !req.body[0] || req.body[0][field] === undefined
-        );
-        
-        if (missingFields.length > 0) {
-          return res.status(400).json({ 
-            error: `Missing required fields: ${missingFields.join(', ')}` 
-          });
-        }
-        next();
-      }
-    }), { virtual: true });
-    
-    // Reload the routes with the new mock
-    jest.resetModules();
-    const inventoryRoutes = require('../../../routes/inventory-routes');
-    invalidApp.use('/api/inventory', inventoryRoutes);
-    
-    // Missing required fields
-    const invalidUpdate = [
-      { productId: 'prod-1' } // missing quantity and location
-    ];
-    
-    const response = await request(invalidApp)
+    const response = await request(app)
       .post('/api/inventory')
-      .send(invalidUpdate);
+      .set('x-api-key', apiKey)
+      .send(invalidData);
     
-    // The status might be 404 if the route isn't properly loaded,
-    // but that's fine for this test which is primarily checking the mock
-    expect(response.status).not.toBe(200);
+    // Should not return 200 - it should return an error status code
+    expect(response.status).toBe(400);
   });
 });

@@ -1,40 +1,73 @@
 /**
- * Request validation middleware
+ * Middleware de validation des requêtes
  */
-const { ValidationError } = require('../utils/error-handler');
+const logger = require('../utils/logger');
 
 /**
- * Validate that request body contains all required fields
- * @param {Array} requiredFields - List of required fields
- * @returns {Function} Express middleware
+ * Valide les champs requis dans le body de la requête
+ * @param {Array<string>} requiredFields - Liste des champs requis
+ * @returns {Function} - Middleware Express
  */
-function validateRequestBody(requiredFields) {
+function validateRequestBody(requiredFields = []) {
   return (req, res, next) => {
-    const missingFields = requiredFields.filter(field => !req.body || req.body[field] === undefined);
-    
-    if (missingFields.length > 0) {
-      const error = new ValidationError(`Missing required fields: ${missingFields.join(', ')}`);
-      return next(error);
+    // Vérifier si le body existe
+    if (!req.body) {
+      logger.warn('Requête sans body');
+      return res.status(400).json({
+        success: false,
+        error: 'Corps de requête vide'
+      });
     }
     
+    // Vérifier chaque champ requis
+    const missingFields = [];
+    
+    for (const field of requiredFields) {
+      if (req.body[field] === undefined) {
+        missingFields.push(field);
+      }
+    }
+    
+    // S'il manque des champs, renvoyer une erreur
+    if (missingFields.length > 0) {
+      logger.warn(`Champs requis manquants: ${missingFields.join(', ')}`);
+      return res.status(400).json({
+        success: false,
+        error: `Champs requis manquants: ${missingFields.join(', ')}`
+      });
+    }
+    
+    // Tous les champs sont présents, continuer
     next();
   };
 }
 
 /**
- * Validate that request query contains all required parameters
- * @param {Array} requiredParams - List of required parameters
- * @returns {Function} Express middleware
+ * Valide les paramètres de requête
+ * @param {Array<string>} requiredParams - Liste des paramètres requis
+ * @returns {Function} - Middleware Express
  */
-function validateQueryParams(requiredParams) {
+function validateQueryParams(requiredParams = []) {
   return (req, res, next) => {
-    const missingParams = requiredParams.filter(param => !req.query || req.query[param] === undefined);
+    // Vérifier chaque paramètre requis
+    const missingParams = [];
     
-    if (missingParams.length > 0) {
-      const error = new ValidationError(`Missing required query parameters: ${missingParams.join(', ')}`);
-      return next(error);
+    for (const param of requiredParams) {
+      if (req.query[param] === undefined) {
+        missingParams.push(param);
+      }
     }
     
+    // S'il manque des paramètres, renvoyer une erreur
+    if (missingParams.length > 0) {
+      logger.warn(`Paramètres requis manquants: ${missingParams.join(', ')}`);
+      return res.status(400).json({
+        success: false,
+        error: `Paramètres requis manquants: ${missingParams.join(', ')}`
+      });
+    }
+    
+    // Tous les paramètres sont présents, continuer
     next();
   };
 }
