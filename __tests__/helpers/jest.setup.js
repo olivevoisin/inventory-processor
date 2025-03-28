@@ -1,31 +1,17 @@
-// Set test environment variable
+// Set up environment for tests
 process.env.NODE_ENV = 'test';
+process.env.API_KEY = 'test-api-key';
 
-// Configure timeout for all tests
-jest.setTimeout(30000);
+// Mock console methods to avoid output during tests
+global.console = {
+  log: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn()
+};
 
-// Set up mock environment variables for testing
-process.env.GOOGLE_SHEETS_API_KEY = 'mock-api-key';
-process.env.GOOGLE_SHEET_ID = 'mock-sheet-id';
-process.env.DEEPGRAM_API_KEY = 'mock-deepgram-key';
-process.env.GOOGLE_CLOUD_TRANSLATE_API_KEY = 'mock-translate-key';
-process.env.UPLOAD_DIR = './uploads';
-
-// Global before all tests
-beforeAll(async () => {
-  console.log('Starting test suite execution...');
-});
-
-// Global after all tests
-afterAll(async () => {
-  console.log('Completed test suite execution');
-  
-  // Add cleanup operations here if needed
-  jest.clearAllMocks();
-});
-
-// Global beforeEach
+// Global beforeEach to clear mocks
 beforeEach(() => {
-  // Reset all mocks before each test
   jest.clearAllMocks();
 });

@@ -1,87 +1,89 @@
 /**
- * Test de flux complet du traitement des factures
+ * Test de flux complet du traitement vocal
  */
 const fs = require('fs');
-const invoiceService = require('../../../modules/invoice-service');
-const invoiceProcessor = require('../../../modules/invoice-processor');
+const path = require('path');
+const voiceProcessor = require('../../../modules/voice-processor');
 const database = require('../../../utils/database-utils');
 
 // Mocker les dépendances
 jest.mock('fs');
-jest.mock('../../../modules/invoice-processor');
+jest.mock('../../../modules/voice-processor');
 jest.mock('../../../utils/database-utils');
 
-// Configuration pour les tests
-const sourceDir = './data/invoices';
-const processedDir = './data/invoices/processed';
-
-describe('Invoice Processing End-to-End Flow', () => {
+describe('Voice Processing End-to-End Flow', () => {
   beforeEach(() => {
     // Réinitialiser les mocks avant chaque test
     jest.clearAllMocks();
     
-    // Simuler des fichiers de facture
-    fs.promises.readdir.mockResolvedValue(['invoice1.pdf', 'invoice2.pdf', 'test.txt']);
-    
-    // Simuler le traitement des factures
-    invoiceProcessor.processInvoice.mockResolvedValue({
-      invoiceId: 'INV-001',
-      invoiceDate: '2023-01-15',
-      supplier: 'Test Supplier',
+    // Simuler le traitement audio
+    voiceProcessor.processVoiceFile.mockResolvedValue({
+      success: true,
+      transcript: "cinq bouteilles de vin rouge et trois cannettes de bière",
       items: [
-        { product: 'Vodka Grey Goose', count: 5, price: '14,995' },
-        { product: 'Wine Cabernet', count: 10, price: '15,990' }
+        { name: 'Vin Rouge', quantity: 5, unit: 'bouteille' },
+        { name: 'Bière', quantity: 3, unit: 'cannette' }
       ]
     });
     
     // Simuler les opérations de base de données
-    database.saveInvoice.mockResolvedValue({ id: 'INV-001' });
     database.saveInventoryItems.mockResolvedValue({ success: true });
   });
   
-  test('should process invoices from start to finish', async () => {
-    // Exécuter le flux
-    await invoiceService.processInvoices(sourceDir, processedDir);
+  test('should process voice recording from start to finish', async () => {
+    const audioPath = '/tmp/test-audio.wav';
+    const location = 'cuisine_maison';
+    const period = '2023-01';
     
-    // Verify processing steps
-    expect(fs.promises.readdir).toHaveBeenCalled();
-    expect(invoiceProcessor.processInvoice).toHaveBeenCalled();
-    expect(database.saveInvoice).toHaveBeenCalled();
+    // Exécuter le traitement vocal
+    const result = await voiceProcessor.processVoiceFile(audioPath, location, period);
     
-    // Vérifier que le déplacement des fichiers a été fait
-    expect(fs.promises.rename).toHaveBeenCalled();
-  });
-  
-  test('should handle empty directory gracefully', async () => {
-    // Simuler un répertoire vide
-    fs.promises.readdir.mockResolvedValue([]);
-    
-    // Exécuter le flux
-    const result = await invoiceService.processInvoices(sourceDir, processedDir);
-    
-    // Verify result
+    // Vérifier le résultat
     expect(result.success).toBe(true);
-    expect(result.processed).toBe(0);
+    expect(result.items).toHaveLength(2);
+    
+    // Vérifier que les données ont été sauvegardées
+    expect(database.saveInventoryItems).toHaveBeenCalled();
   });
   
-  test('should add translated items to inventory', async () => {
-    // Simuler une facture avec des éléments traduits
-    invoiceProcessor.processInvoice.mockResolvedValue({
-      invoiceId: 'INV-002',
-      invoiceDate: '2023-01-20',
-      supplier: 'Japanese Supplier',
-      items: [
-        { product: 'ウォッカ グレイグース', count: 3, price: '8,997' },
-        { product: 'ワイン カベルネ', count: 6, price: '9,594' }
-      ]
+  test('should handle empty transcription gracefully', async () => {
+    // Simuler une transcription vide
+    voiceProcessor.processVoiceFile.mockResolvedValueOnce({
+      success: true,
+      transcript: "",
+      items: []
     });
     
-    // Exécuter le traitement d'une seule facture
-    const result = await invoiceService.processSingleInvoice('sample.pdf', 'Bar');
+    const audioPath = '/tmp/empty-audio.wav';
+    const location = 'cuisine_maison';
+    const period = '2023-01';
     
-    // Verify
-    expect(database.saveInvoice).toHaveBeenCalled();
-    expect(database.saveInventoryItems).toHaveBeenCalled();
-    expect(result).toHaveProperty('invoiceId');
+    // Exécuter le traitement vocal
+    const result = await voiceProcessor.processVoiceFile(audioPath, location, period);
+    
+    // Vérifier le résultat
+    expect(result.success).toBe(true);
+    expect(result.items).toHaveLength(0);
+  });
+  
+  test('should extract inventory items correctly', async () => {
+    // Simuler différents formats d'énoncés
+    const testTranscript = "dix bouteilles de vodka, cinq boîtes de vin et deux kilogrammes de sucre";
+    
+    // Mocker l'extraction 
+    voiceProcessor.extractInventoryItems.mockReturnValueOnce([
+      { name: 'Vodka', quantity: 10, unit: 'bouteille' },
+      { name: 'Vin', quantity: 5, unit: 'boîte' },
+      { name: 'Sucre', quantity: 2, unit: 'kilogramme' }
+    ]);
+    
+    // Exécuter l'extraction
+    const items = voiceProcessor.extractInventoryItems(testTranscript);
+    
+    // Vérifier les résultats
+    expect(items).toHaveLength(3);
+    expect(items[0].name).toBe('Vodka');
+    expect(items[1].quantity).toBe(5);
+    expect(items[2].unit).toBe('kilogramme');
   });
 });

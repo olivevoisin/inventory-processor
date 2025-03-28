@@ -1,23 +1,24 @@
 /**
- * Gestionnaire d'erreurs
- * Fournit des classes d'erreur personnalisées et un middleware de gestion des erreurs
+ * Error Handler Module
+ * Custom error classes and error handling utilities
  */
 const logger = require('./logger');
 
 /**
- * Classe d'erreur de base
+ * Base custom error class
  */
 class AppError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, status = 500) {
     super(message);
     this.name = this.constructor.name;
-    this.statusCode = statusCode;
+    this.status = status;
+    this.statusCode = status; // For compatibility
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
 /**
- * Erreur de validation
+ * Error for invalid input data
  */
 class ValidationError extends AppError {
   constructor(message, fields = {}) {
@@ -27,31 +28,29 @@ class ValidationError extends AppError {
 }
 
 /**
- * Erreur d'authentification
+ * Error for authentication failures
  */
 class AuthenticationError extends AppError {
-  constructor(message = 'Échec d\'authentification') {
+  constructor(message = 'Authentication failed') {
     super(message, 401);
   }
 }
 
 /**
- * Erreur d'autorisation
+ * Error for authorization failures
  */
 class AuthorizationError extends AppError {
-  constructor(message = 'Non autorisé') {
+  constructor(message = 'Not authorized') {
     super(message, 403);
   }
 }
 
 /**
- * Erreur de ressource non trouvée
+ * Error for resource not found
  */
 class NotFoundError extends AppError {
-  constructor(resource = 'Ressource', id = '') {
-    const message = id 
-      ? `${resource} avec l'ID '${id}' non trouvé(e)` 
-      : `${resource} non trouvé(e)`;
+  constructor(resource = 'Resource', id = '') {
+    const message = id ? `${resource} with ID '${id}' not found` : `${resource} not found`;
     super(message, 404);
     this.resource = resource;
     this.resourceId = id;
@@ -59,70 +58,82 @@ class NotFoundError extends AppError {
 }
 
 /**
- * Erreur de service externe
+ * Error for database operation failures
+ */
+class DatabaseError extends AppError {
+  constructor(message) {
+    super(message, 500);
+  }
+}
+
+/**
+ * Error for external service failures
  */
 class ExternalServiceError extends AppError {
   constructor(service, message, originalError = null) {
-    super(`Erreur du service ${service}: ${message}`, 502);
+    super(`${service} service error: ${message}`, 502);
     this.service = service;
     this.originalError = originalError;
   }
 }
 
 /**
- * Middleware de gestion globale des erreurs
- * @param {Error} err - Erreur survenue
- * @param {Object} req - Requête Express
- * @param {Object} res - Réponse Express
- * @param {Function} next - Fonction next
+ * Error for API-related failures
  */
-function globalErrorHandler(err, req, res, next) {
-  // Journaliser l'erreur
-  logger.error(`${err.name}: ${err.message}`, {
-    path: req.path,
-    method: req.method,
-    statusCode: err.statusCode || 500
-  });
-  
-  if (err.stack) {
-    logger.debug(err.stack);
+class APIError extends AppError {
+  constructor(message, statusCode = 500) {
+    super(message, statusCode);
   }
-  
-  // Déterminer le code d'état de la réponse
-  const statusCode = err.statusCode || 500;
-  
-  // Préparer la réponse d'erreur
-  const errorResponse = {
-    success: false,
-    error: {
-      message: err.message || 'Une erreur est survenue',
-      type: err.name
-    }
-  };
-  
-  // Ajouter des détails pour les erreurs de validation
-  if (err instanceof ValidationError && err.fields) {
-    errorResponse.error.fields = err.fields;
-  }
-  
-  // En développement, inclure la stack trace
-  if (process.env.NODE_ENV !== 'production') {
-    errorResponse.error.stack = err.stack;
-  }
-  
-  // Envoyer la réponse
-  res.status(statusCode).json(errorResponse);
 }
 
 /**
- * Gestionnaire pour les promesses asynchrones dans les routes
- * @param {Function} fn - Fonction de route asynchrone
- * @returns {Function} - Middleware Express
+ * Handle error in async routes
+ * @param {Function} fn - Async route handler
+ * @returns {Function} - Express middleware function
  */
 function asyncHandler(fn) {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
+}
+
+/**
+ * Global error handler middleware
+ * @param {Error} err - Error object
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+function errorMiddleware(err, req, res, next) {
+  // Log error details
+  logger.error(`${err.name}: ${err.message}`);
+  
+  if (err.stack) {
+    logger.debug(err.stack);
+  }
+  
+  // Default error status and message
+  const status = err.status || 500;
+  const message = err.message || 'Something went wrong';
+  
+  // Send error response
+  res.status(status).json({
+    success: false,
+    error: message
+  });
+}
+
+/**
+ * Main error handling function for easier testing
+ */
+function handleError(err, req, res) {
+  const status = err.status || 500;
+  const message = err.message || 'An error occurred';
+  
+  res.status(status).json({
+    success: false,
+    error: message
+  });
 }
 
 module.exports = {
@@ -131,7 +142,12 @@ module.exports = {
   AuthenticationError,
   AuthorizationError,
   NotFoundError,
+  DatabaseError,
   ExternalServiceError,
-  globalErrorHandler,
-  asyncHandler
+  APIError,
+  asyncHandler,
+  errorMiddleware,
+  handleError,
+  // Export this for testing
+  globalErrorHandler: errorMiddleware
 };

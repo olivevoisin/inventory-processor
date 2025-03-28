@@ -1,240 +1,136 @@
-// Mock Deepgram
-const mockDeepgramTranscribeFn = jest.fn().mockResolvedValue({
-  results: {
-    channels: [{
-      alternatives: [{
-        transcript: "five bottles of wine and three cans of beer",
-        confidence: 0.95
-      }]
-    }]
-  }
-});
+const voiceProcessor = require('../../../modules/voice-processor');
+const fs = require('fs').promises;
+const path = require('path');
+const logger = require('../../../utils/logger');
 
-const mockDeepgramPreRecordedFn = jest.fn().mockImplementation(() => ({
-  transcribe: mockDeepgramTranscribeFn
-}));
-
-const mockDeepgramInstance = {
-  transcription: {
-    preRecorded: mockDeepgramPreRecordedFn
-  }
-};
-
-jest.mock('@deepgram/sdk', () => ({
-  Deepgram: jest.fn().mockImplementation(() => mockDeepgramInstance)
-}));
-
-// Mock fs
+// Mock fs.promises
 jest.mock('fs', () => ({
   promises: {
-    readFile: jest.fn().mockResolvedValue(Buffer.from('mock audio content')),
-    writeFile: jest.fn().mockResolvedValue(undefined),
-    unlink: jest.fn().mockResolvedValue(undefined),
+    readFile: jest.fn().mockResolvedValue(Buffer.from('fake audio data')),
     mkdir: jest.fn().mockResolvedValue(undefined)
   },
   existsSync: jest.fn().mockReturnValue(true)
-}));
-
-// Mock database-utils
-const mockFindProductByName = jest.fn().mockImplementation((name) => {
-  const products = {
-    'wine': { id: 'prod-1', name: 'Wine', unit: 'bottle', price: 15 },
-    'beer': { id: 'prod-2', name: 'Beer', unit: 'can', price: 5 }
-  };
-  return Promise.resolve(products[name.toLowerCase()] || null);
-});
-
-jest.mock('../../../utils/database-utils', () => ({
-  findProductByName: mockFindProductByName,
-  saveInventoryItems: jest.fn().mockResolvedValue({ success: true })
-}));
-
-// Mock config
-jest.mock('../../../config', () => ({
-  deepgram: {
-    apiKey: 'mock-api-key'
-  },
-  uploads: {
-    audioDir: './uploads/audio'
-  }
 }));
 
 // Mock logger
 jest.mock('../../../utils/logger', () => ({
   info: jest.fn(),
   error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn()
+  debug: jest.fn(),
+  warn: jest.fn()
+}));
+
+// Mock database-utils
+jest.mock('../../../utils/database-utils', () => ({
+  saveInventoryItems: jest.fn().mockResolvedValue({ success: true }),
+  findProductByName: jest.fn().mockImplementation(name => {
+    if (name.toLowerCase().includes('wine')) {
+      return { name: 'Wine', unit: 'bottle' };
+    }
+    return null;
+  })
 }));
 
 describe('Voice Processor Module', () => {
-  let voiceProcessor;
-  let fs;
-  let logger;
-  
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Reset modules to ensure clean state
-    jest.resetModules();
-    
-    // Load mocked modules
-    fs = require('fs');
-    logger = require('../../../utils/logger');
-    
-    // Import the module after mocks are set up
-    try {
-      voiceProcessor = require('../../../modules/voice-processor');
-    } catch (error) {
-      console.error('Error loading voice-processor module:', error.message);
-    }
   });
   
   test('processAudio handles audio files correctly', async () => {
-    // Skip if module or method doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.processAudio !== 'function') {
-      console.warn('Skipping test: processAudio method not available');
-      return;
-    }
+    // Setup
+    const filePath = 'test-audio.wav';
     
-    const result = await voiceProcessor.processAudio('test-audio.wav');
+    // Execute
+    const result = await voiceProcessor.processAudio(filePath);
     
-    // Check if file was read
-    expect(fs.promises.readFile).toHaveBeenCalledWith('test-audio.wav');
-    expect(result).toBeDefined();
-    expect(result).toHaveProperty('transcript');
-    expect(result).toHaveProperty('items');
+    // Verify
+    expect(result.success).toBe(true);
+    expect(result.transcript).toBeDefined();
+    expect(fs.readFile).toHaveBeenCalledWith(filePath);
+    expect(logger.info).toHaveBeenCalled();
   });
   
   test('transcribeAudio handles different audio formats', async () => {
-    // Skip if module or method doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.transcribeAudio !== 'function') {
-      console.warn('Skipping test: transcribeAudio method not available');
-      return;
-    }
+    // Setup
+    const audioData = Buffer.from('fake audio data');
     
-    // Test with WAV format
-    await voiceProcessor.transcribeAudio(Buffer.from('wav audio content'));
+    // Execute
+    const result = await voiceProcessor.transcribeAudio(audioData);
+    
+    // Verify
+    expect(result.transcript).toBeDefined();
+    expect(result.confidence).toBeGreaterThan(0);
+    
+    // Verify that the Deepgram API was called correctly
+    const mockDeepgramPreRecordedFn = voiceProcessor.deepgram.transcription.preRecorded;
+    const mockDeepgramTranscribeFn = mockDeepgramPreRecordedFn().transcribe;
     
     // Check that the mock was called with correct parameters
     expect(mockDeepgramPreRecordedFn).toHaveBeenCalled();
     expect(mockDeepgramTranscribeFn).toHaveBeenCalled();
-    
-    // Reset mocks
-    jest.clearAllMocks();
-    
-    // Test with MP3 format mock
-    if (voiceProcessor.detectAudioFormat) {
-      // If the module has format detection, we test it
-      jest.spyOn(voiceProcessor, 'detectAudioFormat').mockReturnValueOnce('audio/mp3');
-      await voiceProcessor.transcribeAudio(Buffer.from('mp3 audio content'));
-      
-      // Verify the correct function was called
-      expect(mockDeepgramPreRecordedFn).toHaveBeenCalled();
-    }
   });
   
-  test('extractInventoryItems recognizes quantities and products correctly', async () => {
-    // Skip if module or method doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.extractInventoryItems !== 'function') {
-      console.warn('Skipping test: extractInventoryItems method not available');
-      return;
-    }
+  test('extractInventoryItems recognizes quantities and products correctly', () => {
+    // Setup
+    const transcript = 'five bottles of wine and three cans of beer';
     
-    // Reset the mock implementation before each test case
-    mockFindProductByName.mockImplementation((name) => {
-      const products = {
-        'wine': { id: 'prod-1', name: 'Wine', unit: 'bottle', price: 15 },
-        'beer': { id: 'prod-2', name: 'Beer', unit: 'can', price: 5 }
-      };
-      return Promise.resolve(products[name.toLowerCase()] || null);
-    });
+    // Execute
+    const items = voiceProcessor.extractInventoryItems(transcript);
     
-    // Test the function with a known transcript
-    const result = await voiceProcessor.extractInventoryItems("five bottles of wine");
-    
-    // Verify the mock was called
-    expect(mockFindProductByName).toHaveBeenCalled();
-    
-    // Verify basic result structure
-    expect(Array.isArray(result)).toBe(true);
+    // Verify
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual(expect.objectContaining({
+      name: 'Wine',
+      quantity: 5,
+      unit: 'bottle'
+    }));
+    expect(items[1]).toEqual(expect.objectContaining({
+      name: 'Beer',
+      quantity: 3,
+      unit: 'can'
+    }));
   });
   
   test('handles file system errors gracefully', async () => {
-    // Skip if module or method doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.processAudio !== 'function') {
-      console.warn('Skipping test: processAudio method not available');
-      return;
-    }
+    // Setup
+    fs.readFile.mockRejectedValueOnce(new Error('File not found'));
     
-    // Setup fs to throw an error
-    fs.promises.readFile.mockRejectedValueOnce(new Error('File not found'));
+    // Execute
+    const result = await voiceProcessor.processAudio('nonexistent-file.wav');
     
-    // Process should throw or return error
-    try {
-      await voiceProcessor.processAudio('non-existent-file.wav');
-      // If we reach here, ensure the error was logged at least
-      expect(logger.error).toHaveBeenCalled();
-    } catch (error) {
-      expect(error.message).toBe('File not found');
-    }
+    // Verify
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    expect(logger.error).toHaveBeenCalled();
   });
   
   test('handles Deepgram API errors gracefully', async () => {
-    // Skip if module or method doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.transcribeAudio !== 'function') {
-      console.warn('Skipping test: transcribeAudio method not available');
-      return;
-    }
+    // Setup
+    const mockDeepgramError = new Error('API quota exceeded');
+    voiceProcessor.deepgram.transcription.preRecorded().transcribe.mockRejectedValueOnce(mockDeepgramError);
     
-    // Setup Deepgram to throw an error
-    mockDeepgramTranscribeFn.mockRejectedValueOnce(new Error('API quota exceeded'));
-    
-    // Process should throw or return error
+    // Execute & verify
     try {
-      await voiceProcessor.transcribeAudio(Buffer.from('audio content'));
-      // If we reach here, ensure the error was logged at least
-      expect(logger.error).toHaveBeenCalled();
+      await voiceProcessor.transcribeAudio(Buffer.from('fake audio data'));
+      fail('Should have thrown an error');
     } catch (error) {
       expect(error.message).toBe('API quota exceeded');
+      expect(logger.error).toHaveBeenCalled();
     }
   });
   
-  test('handles empty transcripts gracefully', async () => {
-    // Skip if module or method doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.extractInventoryItems !== 'function') {
-      console.warn('Skipping test: extractInventoryItems method not available');
-      return;
-    }
+  test('handles empty transcripts gracefully', () => {
+    // Setup & execute
+    const items = voiceProcessor.extractInventoryItems('');
     
-    // Call with empty transcript
-    const result = await voiceProcessor.extractInventoryItems("");
-    
-    // Should return empty array, not error
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBe(0);
+    // Verify
+    expect(items).toEqual([]);
   });
   
   test('textToNumber handles various number formats', () => {
-    // Skip if module or function doesn't exist
-    if (!voiceProcessor || typeof voiceProcessor.textToNumber !== 'function') {
-      // If textToNumber is private, indirectly test it through extractInventoryItems
-      console.warn('Skipping test: textToNumber function not available');
-      return;
-    }
-    
-    const testCases = [
-      { input: 'one', expected: 1 },
-      { input: 'five', expected: 5 },
-      { input: 'ten', expected: 10 },
-      { input: '5', expected: 5 },
-      { input: '10', expected: 10 },
-      { input: 'unknown', expected: 1 } // Default value
-    ];
-    
-    for (const testCase of testCases) {
-      const result = voiceProcessor.textToNumber(testCase.input);
-      expect(result).toBe(testCase.expected);
-    }
+    // Execute & verify
+    expect(voiceProcessor.textToNumber('5')).toBe(5);
+    expect(voiceProcessor.textToNumber('five')).toBe(5);
+    expect(voiceProcessor.textToNumber('unknown')).toBe(1);
   });
 });

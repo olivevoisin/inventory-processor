@@ -1,114 +1,128 @@
 /**
- * Module de surveillance du système
- * Fournit des fonctionnalités pour surveiller l'état et les performances de l'application
+ * System monitoring utilities
  */
 const os = require('os');
 const logger = require('./logger');
 
-// Compteurs d'utilisation
-let apiCalls = {};
-let errorCounts = {};
-let startTime = Date.now();
+// Metrics collection
+const metrics = {
+  apiCalls: {},
+  errors: {},
+  startTime: Date.now(),
+  lastResetTime: Date.now(),
+  responseTimes: []
+};
 
 /**
- * Enregistre un appel API
- * @param {string} endpoint - Point de terminaison API
- * @param {string} method - Méthode HTTP
+ * Record API endpoint usage
+ * @param {string} endpoint - API endpoint name
  */
-function trackApiCall(endpoint, method = 'GET') {
-  const key = `${method.toUpperCase()} ${endpoint}`;
-  
-  if (!apiCalls[key]) {
-    apiCalls[key] = 0;
+function recordApiUsage(endpoint) {
+  if (!metrics.apiCalls[endpoint]) {
+    metrics.apiCalls[endpoint] = 0;
   }
-  
-  apiCalls[key]++;
+  metrics.apiCalls[endpoint]++;
 }
 
 /**
- * Enregistre une erreur
- * @param {string} endpoint - Point de terminaison où l'erreur s'est produite
- * @param {number} statusCode - Code d'état HTTP de l'erreur
+ * Record error occurrence
+ * @param {Error} error - Error object
+ * @param {string} source - Error source
  */
-function trackError(endpoint, statusCode) {
-  const key = `${endpoint}_${statusCode}`;
+function recordError(error, source = 'unknown') {
+  const errorType = error.name || 'UnknownError';
+  const errorSource = source || error.source || 'unknown';
   
-  if (!errorCounts[key]) {
-    errorCounts[key] = 0;
+  const key = `${errorSource}:${errorType}`;
+  
+  if (!metrics.errors[key]) {
+    metrics.errors[key] = 0;
   }
+  metrics.errors[key]++;
   
-  errorCounts[key]++;
+  logger.error(`Error in ${errorSource}: ${error.message}`);
 }
 
 /**
- * Récupère des informations sur l'état du système
- * @returns {Object} - Informations d'état du système
+ * Record API response time
+ * @param {number} responseTime - Response time in ms
+ */
+function recordResponseTime(responseTime) {
+  metrics.responseTimes.push(responseTime);
+  
+  // Keep only the last 1000 response times
+  if (metrics.responseTimes.length > 1000) {
+    metrics.responseTimes.shift();
+  }
+}
+
+/**
+ * Get current metrics
+ * @returns {Object} - Current metrics
+ */
+function getMetrics() {
+  const totalApiCalls = Object.values(metrics.apiCalls).reduce((sum, count) => sum + count, 0);
+  const totalErrors = Object.values(metrics.errors).reduce((sum, count) => sum + count, 0);
+  const avgResponseTime = metrics.responseTimes.length > 0
+    ? metrics.responseTimes.reduce((sum, time) => sum + time, 0) / metrics.responseTimes.length
+    : 0;
+  
+  return {
+    uptime: Math.floor((Date.now() - metrics.startTime) / 1000),
+    apiCallsTotal: totalApiCalls,
+    errorsTotal: totalErrors,
+    errorRate: totalApiCalls > 0 ? totalErrors / totalApiCalls : 0,
+    avgResponseTime: avgResponseTime,
+    apiCalls: { ...metrics.apiCalls },
+    errors: { ...metrics.errors }
+  };
+}
+
+/**
+ * Get system health information
+ * @returns {Object} - Health information
  */
 function getSystemHealth() {
-  // Calculer le temps d'activité
-  const uptime = Math.floor((Date.now() - startTime) / 1000);
-  
-  // Récupérer l'utilisation de la mémoire
+  const uptime = process.uptime();
   const memory = {
     total: os.totalmem(),
     free: os.freemem(),
-    used: os.totalmem() - os.freemem(),
-    usagePercent: ((os.totalmem() - os.freemem()) / os.totalmem() * 100).toFixed(1)
+    used: os.totalmem() - os.freemem()
   };
-  
-  // Récupérer l'utilisation du CPU
-  const cpuLoad = os.loadavg()[0];
-  
-  // Compter les appels API totaux
-  const apiCallsTotal = Object.values(apiCalls).reduce((sum, count) => sum + count, 0);
-  
-  // Compter les erreurs totales
-  const errorsTotal = Object.values(errorCounts).reduce((sum, count) => sum + count, 0);
-  
-  // Calculer le taux d'erreurs
-  const errorRate = apiCallsTotal > 0 ? (errorsTotal / apiCallsTotal) : 0;
+  const cpuUsage = os.loadavg()[0]; // 1 minute load average
   
   return {
-    status: errorRate > 0.1 ? 'degraded' : 'healthy',
+    status: 'healthy',
     uptime,
     memory,
-    cpu: {
-      load: cpuLoad,
-      cores: os.cpus().length
-    },
-    api: {
-      calls: apiCalls,
-      callsTotal: apiCallsTotal,
-      errors: errorCounts,
-      errorsTotal,
-      errorRate
-    },
-    timestamp: new Date().toISOString()
+    cpu: cpuUsage,
+    metrics: getMetrics()
   };
 }
 
 /**
- * Réinitialise les compteurs de surveillance
+ * Reset metrics
  */
-function resetStats() {
-  apiCalls = {};
-  errorCounts = {};
-  startTime = Date.now();
+function resetMetrics() {
+  metrics.apiCalls = {};
+  metrics.errors = {};
+  metrics.lastResetTime = Date.now();
+  metrics.responseTimes = [];
 }
 
 /**
- * Arrête le monitoring
+ * Shutdown monitoring
  */
 function shutdown() {
-  logger.info('Arrêt du module de surveillance');
-  // Aucune action nécessaire pour le moment
-  // Ce serait utile s'il y avait des intervalles à effacer
+  logger.info('Shutting down monitoring');
 }
 
 module.exports = {
-  trackApiCall,
-  trackError,
+  recordApiUsage,
+  recordError,
+  recordResponseTime,
+  getMetrics,
   getSystemHealth,
-  resetStats,
+  resetMetrics,
   shutdown
 };

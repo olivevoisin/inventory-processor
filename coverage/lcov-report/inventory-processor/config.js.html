@@ -30,9 +30,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">96.15% </span>
+                <span class="strong">60% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>25/26</span>
+                <span class='fraction'>6/10</span>
             </div>
         
             
@@ -110,19 +110,13 @@
 <a name='L45'></a><a href='#L45'>45</a>
 <a name='L46'></a><a href='#L46'>46</a>
 <a name='L47'></a><a href='#L47'>47</a>
-<a name='L48'></a><a href='#L48'>48</a>
-<a name='L49'></a><a href='#L49'>49</a>
-<a name='L50'></a><a href='#L50'>50</a>
-<a name='L51'></a><a href='#L51'>51</a>
-<a name='L52'></a><a href='#L52'>52</a>
-<a name='L53'></a><a href='#L53'>53</a>
-<a name='L54'></a><a href='#L54'>54</a>
-<a name='L55'></a><a href='#L55'>55</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L48'></a><a href='#L48'>48</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">18x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -162,65 +156,50 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
- * Configuration de l'application
+ * Configuration Module
+ * Contains application configuration settings
  */
 require('dotenv').config();
 &nbsp;
 const config = {
-  // Configuration du serveur
-  port: process.env.PORT || 8080,
+  // Application info
+  appName: 'Inventory Management System',
+  version: '1.0.0',
   environment: process.env.NODE_ENV || <span class="branch-1 cbranch-no" title="branch not covered" >'development',</span>
-  version: process.env.VERSION || '1.0.0',
-  appName: 'Système de Gestion d\'Inventaire',
   
-  // Répertoires d'upload
-  uploads: {
-    voiceDir: process.env.VOICE_UPLOAD_DIR || './uploads/voice',
-    invoiceDir: process.env.INVOICE_UPLOAD_DIR || './uploads/invoices'
-  },
+  // Server settings
+  port: process.env.PORT || <span class="branch-1 cbranch-no" title="branch not covered" >8080,</span>
   
-  // Configuration du traitement des factures
-  invoiceSourceDir: process.env.INVOICE_SOURCE_DIR || './uploads/invoices',
-  invoiceProcessedDir: process.env.INVOICE_PROCESSED_DIR || './uploads/invoices/processed',
-  invoiceSchedule: process.env.INVOICE_SCHEDULE || '0 0 * * *', // Minuit tous les jours
-  
-  // Emplacements d'inventaire
-  locations: [
-    'cuisine_maison',
-    'cuisine_bicoque',
-    'boisson_bicoque',
-    'boisson_maison'
-  ],
-  
-  // Configuration Google Sheets
+  // Google Sheets settings
   googleSheets: {
     apiKey: process.env.GOOGLE_SHEETS_API_KEY,
     docId: process.env.GOOGLE_SHEETS_DOC_ID,
     clientEmail: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
     privateKey: process.env.GOOGLE_SHEETS_PRIVATE_KEY
-      ? process.env.GOOGLE_SHEETS_PRIVATE_KEY.replace(/\\n/g, '\n')
-      : undefined
   },
   
-  // Configuration de journalisation
-  logging: {
-    level: process.env.LOG_LEVEL || 'info',
-    file: {
-      enabled: process.env.LOG_TO_FILE === 'true',
-      directory: process.env.LOG_DIR || './logs',
-      maxSize: process.env.LOG_MAX_SIZE || '10m',
-      maxFiles: parseInt(process.env.LOG_MAX_FILES || '7', 10)
-    }
+  // Voice processing settings
+  deepgram: {
+    apiKey: process.env.DEEPGRAM_API_KEY
+  },
+  
+  // Translation settings
+  translation: {
+    apiKey: process.env.TRANSLATION_API_KEY
+  },
+  
+  // Upload directories
+  uploads: {
+    voiceDir: process.env.VOICE_UPLOAD_DIR || './uploads/voice',
+    invoiceDir: process.env.INVOICE_UPLOAD_DIR || <span class="branch-1 cbranch-no" title="branch not covered" >'./uploads/invoices'</span>
+  },
+  
+  // Invoice processing settings
+  invoiceProcessing: {
+    enabled: process.env.ENABLE_INVOICE_PROCESSING !== 'false',
+    schedule: process.env.INVOICE_PROCESSING_SCHEDULE || <span class="branch-1 cbranch-no" title="branch not covered" >'0 0 * * *' </span>// Daily at midnight
   }
 };
 &nbsp;
@@ -232,7 +211,7 @@ module.exports = config;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-26T15:30:54.291Z
+                at 2025-03-27T01:24:16.195Z
             </div>
         <script src="../prettify.js"></script>
         <script>

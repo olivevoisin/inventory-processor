@@ -1,179 +1,129 @@
-const os = require('os');
+const monitoring = require('../../../modules/monitoring');
+const notifications = require('../../../utils/notification');
 
-// Mock config
-jest.mock('../../../config', () => ({
-  monitoring: {
-    enabled: true,
-    alertThresholds: {
-      memory: 70, // alert when memory usage is above 70% (lower than actual to trigger alert)
-      cpu: 70,    // alert when CPU usage is above 70%
-      apiErrors: 10 // alert when there are more than 10 API errors in 5 minutes
-    }
-  }
-}));
-
-// Mock notification service
-const mockNotifyAdmin = jest.fn().mockResolvedValue({ success: true });
-const mockNotifyError = jest.fn().mockResolvedValue({ success: true });
-
+// Mock the notification module
 jest.mock('../../../utils/notification', () => ({
-  notifyAdmin: mockNotifyAdmin,
-  notifyError: mockNotifyError
-}));
-
-// Mock os module with values that will trigger alerts
-jest.mock('os', () => ({
-  totalmem: jest.fn().mockReturnValue(1000000000), // 1GB
-  freemem: jest.fn().mockReturnValue(200000000),   // 200MB (80% used)
-  loadavg: jest.fn().mockReturnValue([2.5, 2.0, 1.5]), // 1, 5, 15 minute averages
-  uptime: jest.fn().mockReturnValue(86400) // 1 day
-}));
-
-// Mock logger
-jest.mock('../../../utils/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn()
+  notifyAdmin: jest.fn()
 }));
 
 describe('Monitoring Module', () => {
-  let monitoring;
-  let mockLogger;
-  
   beforeEach(() => {
+    // Clear mock counts before each test
     jest.clearAllMocks();
     
-    // Reset modules to ensure clean state
-    jest.resetModules();
-    
-    // Load mocked modules
-    mockLogger = require('../../../utils/logger');
-    
-    // Import the module after mocks are set up
-    try {
-      monitoring = require('../../../utils/monitoring');
-    } catch (error) {
-      console.error('Error loading monitoring module:', error.message);
-    }
+    // Reset the module state
+    monitoring.resetCounters();
   });
   
   test('recordApiUsage tracks API endpoint usage', () => {
-    // Skip if module or method doesn't exist
-    if (!monitoring || !monitoring.recordApiUsage) {
-      console.warn('Skipping test: recordApiUsage method not available');
-      return;
-    }
+    // Record some API usage
+    monitoring.recordApiUsage('/api/test');
+    monitoring.recordApiUsage('/api/test');
+    monitoring.recordApiUsage('/api/another');
     
-    // Record usage of various endpoints
-    monitoring.recordApiUsage('getProducts');
-    monitoring.recordApiUsage('getProducts');
-    monitoring.recordApiUsage('processVoice');
+    // Get system health to check if usage was tracked
+    const health = monitoring.getSystemHealth();
     
-    // Get system health which should include API usage
-    const healthInfo = monitoring.getSystemHealth();
-    
-    // Verify API usage was recorded
-    expect(healthInfo.apiUsage).toBeDefined();
-    expect(healthInfo.apiUsage.getProducts).toBe(2);
-    expect(healthInfo.apiUsage.processVoice).toBe(1);
+    // Check if the API usage was properly recorded
+    expect(health.api.endpoints['/api/test']).toBe(2);
+    expect(health.api.endpoints['/api/another']).toBe(1);
+    expect(health.api.totalCalls).toBe(3);
   });
   
   test('recordError tracks error occurrences', () => {
-    // Skip if module or method doesn't exist
-    if (!monitoring || !monitoring.recordError) {
-      console.warn('Skipping test: recordError method not available');
-      return;
-    }
+    // Record some errors
+    monitoring.recordError(new Error('Test error 1'));
+    monitoring.recordError('Test error 2');
     
-    // Record various errors
-    const error1 = new Error('Database connection failed');
-    const error2 = new Error('API request failed');
+    // Get system health to check if errors were tracked
+    const health = monitoring.getSystemHealth();
     
-    monitoring.recordError(error1, 'database');
-    monitoring.recordError(error2, 'api');
-    monitoring.recordError(error2, 'api'); // Duplicate error
-    
-    // Get error stats
-    const errorStats = monitoring.getErrorStats && monitoring.getErrorStats();
-    
-    // If getErrorStats exists, verify error tracking
-    if (errorStats) {
-      expect(errorStats.total).toBe(3);
-      expect(errorStats.bySource.database).toBe(1);
-      expect(errorStats.bySource.api).toBe(2);
-    }
-    
-    // Verify errors were logged
-    expect(mockLogger.error).toHaveBeenCalledTimes(3);
+    // Check if errors were properly recorded
+    expect(health.api.errors).toBe(2);
   });
   
   test('getSystemHealth returns comprehensive health information', () => {
-    // Skip if module or method doesn't exist
-    if (!monitoring || !monitoring.getSystemHealth) {
-      console.warn('Skipping test: getSystemHealth method not available');
-      return;
-    }
+    // Get system health information
+    const health = monitoring.getSystemHealth();
     
-    const healthInfo = monitoring.getSystemHealth();
+    // Check if all required properties are present
+    expect(health).toHaveProperty('status');
+    expect(health).toHaveProperty('timestamp');
+    expect(health).toHaveProperty('uptime');
+    expect(health).toHaveProperty('memory');
+    expect(health).toHaveProperty('cpu');
+    expect(health).toHaveProperty('api');
     
-    // Verify health information structure
-    expect(healthInfo).toHaveProperty('status');
-    expect(healthInfo).toHaveProperty('uptime');
-    expect(healthInfo).toHaveProperty('memory');
-    expect(healthInfo).toHaveProperty('cpu');
+    // Check if memory information is present
+    expect(health.memory).toHaveProperty('total');
+    expect(health.memory).toHaveProperty('free');
+    expect(health.memory).toHaveProperty('used');
+    expect(health.memory).toHaveProperty('usagePercent');
     
-    // Verify memory information
-    expect(healthInfo.memory).toHaveProperty('total');
-    expect(healthInfo.memory).toHaveProperty('free');
-    expect(healthInfo.memory).toHaveProperty('used');
+    // Check if CPU information is present
+    expect(health.cpu).toHaveProperty('loadAverage');
+    expect(health.cpu).toHaveProperty('cores');
+    expect(health.cpu).toHaveProperty('usagePercent');
     
-    // Verify memory calculations
-    expect(healthInfo.memory.total).toBe(1000000000); // From mock
-    expect(healthInfo.memory.free).toBe(200000000);   // From mock
-    expect(healthInfo.memory.used).toBe(800000000);   // Calculated
-    
-    // Verify CPU information
-    expect(healthInfo.cpu).toBe(2.5); // From mock
+    // Check if API information is present
+    expect(health.api).toHaveProperty('totalCalls');
+    expect(health.api).toHaveProperty('errors');
+    expect(health.api).toHaveProperty('endpoints');
+    expect(health.api).toHaveProperty('errorRate');
   });
   
   test('checkThresholds triggers alerts when thresholds are exceeded', () => {
-    // Skip if module or method doesn't exist
-    if (!monitoring || !monitoring.checkThresholds) {
-      console.warn('Skipping test: checkThresholds method not available');
-      return;
-    }
+    // Backup the original implementation of getSystemHealth
+    const originalGetSystemHealth = monitoring.getSystemHealth;
     
-    // Directly call checkThresholds - memory usage is 80% which should trigger alert
-    monitoring.checkThresholds();
+    // Mock getSystemHealth to return high memory and CPU usage
+    monitoring.getSystemHealth = jest.fn().mockReturnValue({
+      memory: { usagePercent: 95 }, // High memory usage
+      cpu: { usagePercent: 90 },    // High CPU usage
+      api: { totalCalls: 100, errors: 10, errorRate: 0.1 }
+    });
     
-    // Since we mocked memory usage to 80% (above the 70% threshold)
+    // Call checkThresholds
+    const result = monitoring.checkThresholds();
+    
+    // Restore original implementation
+    monitoring.getSystemHealth = originalGetSystemHealth;
+    
+    // Check if the result indicates alerts
+    expect(result.hasAlerts).toBe(true);
+    expect(result.alerts.length).toBeGreaterThan(0);
+    
+    // Check if notifications were sent
+    // Since we've triggered both memory and CPU alerts
     // and CPU to 2.5 (likely above threshold depending on the system),
     // both alerts should be triggered
-    expect(mockNotifyAdmin).toHaveBeenCalled();
-    expect(mockNotifyAdmin.mock.calls[0][0]).toMatch(/memory|cpu/i);
+    expect(notifications.notifyAdmin).toHaveBeenCalled();
+    expect(notifications.notifyAdmin.mock.calls[0][0]).toMatch(/memory|cpu/i);
   });
   
   test('startMonitoring sets up periodic health checks', () => {
-    // Skip if module or method doesn't exist
-    if (!monitoring || !monitoring.startMonitoring) {
-      console.warn('Skipping test: startMonitoring method not available');
-      return;
-    }
+    // Backup the original setInterval function
+    const originalSetInterval = global.setInterval;
     
     // Mock setInterval
-    jest.useFakeTimers();
-    const originalSetInterval = global.setInterval;
     global.setInterval = jest.fn();
     
-    // Start monitoring
-    monitoring.startMonitoring();
+    // Call startMonitoring
+    const result = monitoring.startMonitoring(10000);
     
-    // Verify interval was set
-    expect(global.setInterval).toHaveBeenCalled();
+    // Check if setInterval was called with the correct interval
+    expect(global.setInterval).toHaveBeenCalledWith(expect.any(Function), 10000);
+    
+    // Check if the result contains expected properties
+    expect(result).toHaveProperty('monitoringActive', true);
+    expect(result).toHaveProperty('interval', 10000);
+    expect(result).toHaveProperty('startTime');
+    
+    // Clean up
+    monitoring.stopMonitoring();
     
     // Restore original setInterval
     global.setInterval = originalSetInterval;
-    jest.useRealTimers();
   });
 });
+

@@ -1,48 +1,53 @@
 /**
- * Middleware d'authentification
+ * Authentication middleware
  */
+const { ValidationError } = require('../utils/error-handler');
 const logger = require('../utils/logger');
 
 /**
- * Vérifie la clé API
- * @param {Object} req - Requête Express
- * @param {Object} res - Réponse Express
- * @param {Function} next - Fonction next
+ * Middleware to validate API key
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
  */
-function authenticateApiKey(req, res, next) {
-  // Récupérer la clé API de l'en-tête
+function validateApiKey(req, res, next) {
+  // Use a fixed test API key in test environment
+  const validApiKey = process.env.NODE_ENV === 'test' 
+    ? 'test-api-key' 
+    : (process.env.API_KEY || 'default-api-key');
+  
   const apiKey = req.headers['x-api-key'];
   
-  // Clé API valide depuis l'environnement ou une valeur de test
-  const validApiKey = process.env.API_KEY || 'test-api-key';
-  
-  // Dans l'environnement de test, ignorer l'authentification
-  if (process.env.NODE_ENV === 'test') {
+  // For test environment, only skip validation if specifically indicated
+  if (process.env.NODE_ENV === 'test' && process.env.SKIP_AUTH_VALIDATION === 'true') {
     return next();
   }
   
-  // Vérifier si la clé est fournie
   if (!apiKey) {
-    logger.warn('Tentative d\'accès sans clé API');
+    logger.warn('API request missing API key');
     return res.status(401).json({
       success: false,
-      error: 'Clé API requise'
+      error: 'API key is required'
     });
   }
   
-  // Vérifier si la clé est valide
   if (apiKey !== validApiKey) {
-    logger.warn(`Tentative d'accès avec une clé API invalide: ${apiKey.substring(0, 5)}...`);
+    logger.warn(`Invalid API key provided: ${apiKey}`);
     return res.status(401).json({
       success: false,
-      error: 'Clé API invalide'
+      error: 'Invalid API key'
     });
   }
   
-  // Clé valide, continuer
   next();
 }
 
+/**
+ * Authenticate API key
+ */
+const authenticateApiKey = validateApiKey;
+
 module.exports = {
+  validateApiKey,
   authenticateApiKey
 };
