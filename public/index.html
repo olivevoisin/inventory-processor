@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="appTitle">Inventory Management System</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1 data-i18n="appTitle">Inventory Management System</h1>
+      <div class="language-switcher">
+        <select id="language-selector">
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+        </select>
+      </div>
+    </div>
+  </header>
+  
+  <nav>
+    <div class="container">
+      <ul class="tabs">
+        <li><a href="#" class="tab-link active" data-tab="dashboard" data-i18n="dashboard">Dashboard</a></li>
+        <li><a href="#" class="tab-link" data-tab="voice" data-i18n="voiceProcessing">Voice Processing</a></li>
+        <li><a href="#" class="tab-link" data-tab="invoice" data-i18n="invoiceProcessing">Invoice Processing</a></li>
+        <li><a href="#" class="tab-link" data-tab="inventory" data-i18n="inventory">Inventory</a></li>
+        <li><a href="#" class="tab-link" data-tab="settings" data-i18n="settings">Settings</a></li>
+      </ul>
+    </div>
+  </nav>
+  
+  <main class="container">
+    <div id="global-error" class="error-message" style="display: none;"></div>
+    
+    <!-- Dashboard Tab -->
+    <div id="dashboard-tab" class="tab-content">
+      <h2 data-i18n="dashboard">Dashboard</h2>
+      <div class="dashboard-widgets">
+        <div class="widget">
+          <h3 data-i18n="inventorySummary">Inventory Summary</h3>
+          <div id="inventory-summary" class="loading">
+            <p data-i18n="loading">Loading...</p>
+          </div>
+        </div>
+        <div class="widget">
+          <h3 data-i18n="recentActivity">Recent Activity</h3>
+          <div id="recent-activity" class="loading">
+            <p data-i18n="loading">Loading...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Voice Processing Tab -->
+    <div id="voice-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="voiceProcessing">Voice Processing</h2>
+      <div class="upload-section">
+        <form id="voice-upload-form" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="voice-file" data-i18n="selectVoiceFile">Select Voice Recording</label>
+            <input type="file" id="voice-file" name="voiceFile" accept="audio/*" required>
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="upload">Upload</button>
+          </div>
+        </form>
+        <div id="voice-upload-status" class="status-message"></div>
+      </div>
+      <div class="voice-instructions">
+        <h3 data-i18n="voiceInstructions">Voice Recording Instructions</h3>
+        <ol>
+          <li data-i18n="voiceInstruction1">Record inventory changes clearly</li>
+          <li data-i18n="voiceInstruction2">Include product IDs when possible</li>
+          <li data-i18n="voiceInstruction3">Specify quantities and locations clearly</li>
+          <li data-i18n="voiceInstruction4">Upload the recording using the form above</li>
+        </ol>
+      </div>
+    </div>
+    
+    <!-- Invoice Processing Tab -->
+    <div id="invoice-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="invoiceProcessing">Invoice Processing</h2>
+      <div class="upload-section">
+        <form id="invoice-upload-form" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="invoice-file" data-i18n="selectInvoiceFile">Select Invoice File</label>
+            <input type="file" id="invoice-file" name="invoiceFile" accept=".pdf,.jpg,.jpeg,.png" required>
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="upload">Upload</button>
+          </div>
+        </form>
+        <div id="invoice-upload-status" class="status-message"></div>
+      </div>
+    </div>
+    
+    <!-- Inventory Tab -->
+    <div id="inventory-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="inventory">Inventory</h2>
+      <div class="inventory-actions">
+        <button id="refresh-inventory" data-i18n="refreshInventory">Refresh Inventory</button>
+        <button id="add-item-button" data-i18n="addItem">Add Item</button>
+      </div>
+      <div id="inventory-list" class="loading">
+        <p data-i18n="loading">Loading...</p>
+      </div>
+      
+      <!-- Add/Edit Item Modal -->
+      <div id="item-modal" class="modal">
+        <div class="modal-content">
+          <span class="close">&times;</span>
+          <h3 id="modal-title" data-i18n="addItem">Add Item</h3>
+          <form id="item-form">
+            <input type="hidden" id="item-id">
+            <div class="form-group">
+              <label for="product-id" data-i18n="productId">Product ID</label>
+              <input type="text" id="product-id" name="productId" required>
+            </div>
+            <div class="form-group">
+              <label for="product-name" data-i18n="productName">Product Name</label>
+              <input type="text" id="product-name" name="name" required>
+            </div>
+            <div class="form-group">
+              <label for="quantity" data-i18n="quantity">Quantity</label>
+              <input type="number" id="quantity" name="quantity" min="0" required>
+            </div>
+            <div class="form-group">
+              <label for="location" data-i18n="location">Location</label>
+              <input type="text" id="location" name="location">
+            </div>
+            <div class="form-group">
+              <button type="submit" data-i18n="save">Save</button>
+              <button type="button" id="cancel-button" data-i18n="cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings Tab -->
+    <div id="settings-tab" class="tab-content" style="display: none;">
+      <h2 data-i18n="settings">Settings</h2>
+      
+      <!-- Google Apps Script Settings -->
+      <div class="settings-section">
+        <h3 data-i18n="googleAppsSettings">Google Apps Script Settings</h3>
+        <form id="google-apps-settings-form">
+          <div class="form-group">
+            <label for="api-endpoint" data-i18n="apiEndpoint">API Endpoint</label>
+            <input type="url" id="api-endpoint" name="apiEndpoint">
+          </div>
+          <div class="form-group">
+            <label for="api-key" data-i18n="apiKey">API Key</label>
+            <input type="password" id="api-key" name="apiKey">
+          </div>
+          <div class="form-group">
+            <label for="spreadsheet-id" data-i18n="spreadsheetId">Spreadsheet ID</label>
+            <input type="text" id="spreadsheet-id" name="spreadsheetId">
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="saveSettings">Save Settings</button>
+            <button type="button" id="test-connection-button" data-i18n="testConnection">Test Connection</button>
+          </div>
+        </form>
+        <div id="connection-status" class="status-message"></div>
+      </div>
+      
+      <!-- App Settings -->
+      <div class="settings-section">
+        <h3 data-i18n="appSettings">Application Settings</h3>
+        <form id="app-settings-form">
+          <div class="form-group">
+            <label for="theme-select" data-i18n="theme">Theme</label>
+            <select id="theme-select" name="theme">
+              <option value="light" data-i18n="themeLight">Light</option>
+              <option value="dark" data-i18n="themeDark">Dark</option>
+              <option value="system" data-i18n="themeSystem">System Default</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <button type="submit" data-i18n="saveSettings">Save Settings</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+  
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 <span data-i18n="appTitle">Inventory Management System</span></p>
+    </div>
+  </footer>
+  
+  <script src="/app.js"></script>
+</body>
+</html>

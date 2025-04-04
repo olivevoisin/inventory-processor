@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Deploy to Cloud Run using Cloud Build
+gcloud builds submit --tag gcr.io/voices-453402/inventory-processor
+
+# Deploy to Cloud Run
+gcloud run deploy inventory-processor \
+  --image gcr.io/voices-453402/inventory-processor \
+  --platform managed \
+  --region us-central1 \
+  --env-vars-file .env.yaml \
+  --allow-unauthenticated
