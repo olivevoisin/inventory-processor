@@ -1,334 +1,344 @@
 /**
-<<<<<<< HEAD
- * Utilitaires de base de données
- * Fournit des fonctionnalités pour interagir avec la base de données
+ * Utilitaires de base de données étendus
+ * Fournit des fonctionnalités avancées pour gérer les données d'inventaire
  */
+const fs = require('fs').promises;
+const path = require('path');
 const logger = require('./logger');
-
-// Mock data for testing
-const mockProducts = [
-  { id: 'prod1', name: 'Wine', unit: 'bottle', price: 15.99 },
-  { id: 'prod2', name: 'Beer', unit: 'can', price: 3.99 },
-  { id: 'prod3', name: 'Vodka', unit: 'bottle', price: 25.99 }
-];
+const googleSheetsService = require('../modules/google-sheets-service');
 
 /**
- * Find product by name with fuzzy search
+ * Récupérer tous les produits
+ * @param {string} location - Emplacement optionnel pour filtrer
+ * @returns {Promise<Array>} - Liste des produits
+ */
+async function getProducts(location) {
+  try {
+    logger.info(`Récupération des produits${location ? ` pour l'emplacement ${location}` : ''}`);
+    
+    // Récupérer les produits depuis Google Sheets
+    const products = await googleSheetsService.getProducts();
+    
+    // Filtrer par emplacement si spécifié
+    if (location) {
+      return products.filter(product => 
+        !product.location || product.location === location
+      );
+    }
+    
+    return products;
+  } catch (error) {
+    logger.error(`Erreur lors de la récupération des produits: ${error.message}`);
+    
+    // Fallback à une liste vide en cas d'erreur
+    return [];
+  }
+}
+
+/**
+ * Rechercher un produit par nom avec correspondance approximative
+ * @param {string} name - Nom du produit à rechercher
+ * @returns {Promise<Object|null>} - Produit trouvé ou null
  */
 async function findProductByName(name) {
-  logger.info(`Searching for product: ${name}`);
   if (!name) return null;
   
-  const lowerName = name.toLowerCase();
-  return mockProducts.find(p => p.name.toLowerCase().includes(lowerName));
-}
-
-/**
- * Save inventory items
- */
-async function saveInventoryItems(data) {
-  logger.info(`Saving inventory items: ${Array.isArray(data) ? data.length : 'object'}`);
-  return { success: true };
-}
-
-/**
- * Save invoice
- */
-async function saveInvoice(invoice) {
-  logger.info(`Saving invoice: ${invoice.invoiceId}`);
-  return { ...invoice, id: `inv-${Date.now()}` };
-}
-
-/**
- * Get products
- */
-async function getProducts() {
-  return [...mockProducts];
-}
-
-/**
- * Get inventory by location
- */
-async function getInventoryByLocation(location) {
-  return [
-    { product: 'Wine', quantity: 10, unit: 'bottle', location },
-    { product: 'Beer', quantity: 24, unit: 'can', location }
-  ];
-=======
- * Database Utilities Module
- * Handles database operations for inventory management
- */
-const logger = require('./logger');
-
-// Mock database for testing
-const mockDatabase = {
-  products: [
-    { id: 1, name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99', location: 'Bar' },
-    { id: 2, name: 'Wine Cabernet', unit: 'bottle', price: '15.99', location: 'Bar' },
-    { id: 3, name: 'Gin Bombay', unit: 'bottle', price: '24.99', location: 'Bar' },
-    { id: 4, name: 'Beer', unit: 'can', price: '3.99', location: 'Bar' }
-  ],
-  inventory: [
-    { id: 1, product: 'Vodka Grey Goose', quantity: 5, location: 'Bar' },
-    { id: 2, product: 'Wine Cabernet', quantity: 10, location: 'Bar' },
-    { id: 3, product: 'Beer', quantity: 24, location: 'Bar' }
-  ],
-  invoices: [
-    { 
-      id: 'inv-123', 
-      date: '2023-01-15', 
-      supplier: 'Test Supplier',
-      items: [{ name: 'Vodka Grey Goose', quantity: 5, price: '14,995' }]
-    }
-  ]
-};
-
-/**
- * Find a product by name with fuzzy matching
- * @param {string} name - Product name to search for
- * @returns {Promise<Object|null>} - Found product or null
- */
-async function findProductByName(name) {
   try {
-    logger.info(`Searching for product: ${name}`);
+    logger.info(`Recherche du produit: ${name}`);
     
-    if (!name) return null;
+    // Normaliser le nom pour la recherche
+    const searchName = name.toLowerCase().trim();
     
-    // Handle specific test cases
-    const testCases = {
-      'wine': { id: 2, name: 'Wine Cabernet', unit: 'bottle', price: '15.99' },
-      'vodka': { id: 1, name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99' },
-      'gin': { id: 3, name: 'Gin Bombay', unit: 'bottle', price: '24.99' },
-      'beer': { id: 4, name: 'Beer', unit: 'can', price: '3.99' }
+    // Récupérer tous les produits
+    const products = await getProducts();
+    
+    // Rechercher une correspondance exacte d'abord
+    let product = products.find(p => 
+      p.name.toLowerCase() === searchName ||
+      p.original_name.toLowerCase() === searchName
+    );
+    
+    if (product) {
+      logger.info(`Produit trouvé avec correspondance exacte: ${product.name}`);
+      return product;
+    }
+    
+    // Rechercher une correspondance partielle
+    const matchingProducts = products.filter(p => 
+      p.name.toLowerCase().includes(searchName) ||
+      searchName.includes(p.name.toLowerCase()) ||
+      (p.original_name && (
+        p.original_name.toLowerCase().includes(searchName) ||
+        searchName.includes(p.original_name.toLowerCase())
+      ))
+    );
+    
+    if (matchingProducts.length > 0) {
+      // Trier par longueur de nom (du plus court au plus long) pour privilégier les correspondances plus précises
+      matchingProducts.sort((a, b) => {
+        const aName = a.name || '';
+        const bName = b.name || '';
+        return aName.length - bName.length;
+      });
+      
+      logger.info(`Produit trouvé avec correspondance partielle: ${matchingProducts[0].name}`);
+      return matchingProducts[0];
+    }
+    
+    logger.info(`Aucun produit trouvé pour: ${name}`);
+    return null;
+  } catch (error) {
+    logger.error(`Erreur lors de la recherche du produit par nom: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Enregistrer des éléments d'inventaire
+ * @param {Array} items - Éléments d'inventaire à enregistrer
+ * @param {string} location - Emplacement
+ * @param {string} period - Période (format YYYY-MM)
+ * @returns {Promise<Object>} - Résultat de l'enregistrement
+ */
+async function saveInventoryItems(items, location, period) {
+  try {
+    if (!Array.isArray(items)) {
+      return { success: false, message: 'Les éléments doivent être un tableau' };
+    }
+    
+    if (items.length === 0) {
+      return { success: true, message: 'Aucun élément à enregistrer' };
+    }
+    
+    // Si period n'est pas spécifié, utiliser le mois en cours
+    if (!period) {
+      const now = new Date();
+      period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    // Extraire la location des items si elle n'est pas spécifiée
+    if (!location && items[0] && items[0].location) {
+      location = items[0].location;
+    }
+    
+    if (!location) {
+      return { success: false, message: 'Emplacement non spécifié' };
+    }
+    
+    // Compléter les éléments avec des données manquantes
+    const enrichedItems = await Promise.all(items.map(async (item) => {
+      const enrichedItem = { ...item };
+      
+      // Si l'élément a un nom de produit mais pas d'ID, rechercher l'ID
+      if (!enrichedItem.productId && enrichedItem.productName) {
+        const product = await findProductByName(enrichedItem.productName);
+        if (product) {
+          enrichedItem.productId = product.id;
+          enrichedItem.product_name = product.name;
+          enrichedItem.unit = enrichedItem.unit || product.unit;
+        }
+      } else if (!enrichedItem.productName && enrichedItem.productId) {
+        // Si l'élément a un ID mais pas de nom, rechercher le nom
+        const products = await getProducts();
+        const product = products.find(p => p.id === enrichedItem.productId);
+        if (product) {
+          enrichedItem.product_name = product.name;
+          enrichedItem.unit = enrichedItem.unit || product.unit;
+        }
+      }
+      
+      return enrichedItem;
+    }));
+    
+    // Enregistrer dans Google Sheets
+    const result = await googleSheetsService.saveInventoryItems(enrichedItems, location, period);
+    
+    return {
+      success: true,
+      location,
+      period,
+      saved: result.saved,
+      errors: result.errors
+    };
+  } catch (error) {
+    logger.error(`Erreur lors de l'enregistrement des éléments d'inventaire: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Ajouter un nouveau produit ou mettre à jour un produit existant
+ * @param {Object} productData - Données du produit
+ * @returns {Promise<Object>} - Produit ajouté ou mis à jour
+ */
+async function addOrUpdateProduct(productData) {
+  try {
+    if (!productData.name) {
+      throw new Error('Le nom du produit est requis');
+    }
+    
+    // Vérifier si le produit existe déjà
+    const existingProduct = await findProductByName(productData.name);
+    
+    if (existingProduct) {
+      // Mettre à jour le produit existant
+      const updatedProduct = {
+        ...existingProduct,
+        ...productData,
+        id: existingProduct.id
+      };
+      
+      // Enregistrer le produit mis à jour
+      const result = await googleSheetsService.saveProduct(updatedProduct);
+      
+      logger.info(`Produit mis à jour: ${updatedProduct.name}`);
+      return result;
+    } else {
+      // Ajouter un nouveau produit
+      const result = await googleSheetsService.saveProduct(productData);
+      
+      logger.info(`Nouveau produit ajouté: ${productData.name}`);
+      return result;
+    }
+  } catch (error) {
+    logger.error(`Erreur lors de l'ajout/mise à jour du produit: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Récupérer l'inventaire pour un emplacement et une période spécifiques
+ * @param {string} location - Emplacement
+ * @param {string} period - Période (format YYYY-MM)
+ * @returns {Promise<Array>} - Éléments d'inventaire
+ */
+async function getInventory(location, period) {
+  try {
+    if (!location) {
+      throw new Error('Emplacement requis');
+    }
+    
+    // Si period n'est pas spécifié, utiliser le mois en cours
+    if (!period) {
+      const now = new Date();
+      period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    return await googleSheetsService.getInventory(location, period);
+  } catch (error) {
+    logger.error(`Erreur lors de la récupération de l'inventaire: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Enregistrer des éléments non reconnus pour examen ultérieur
+ * @param {Array} items - Éléments non reconnus
+ * @param {string} location - Emplacement
+ * @returns {Promise<Object>} - Résultat
+ */
+async function saveUnknownItems(items, location) {
+  try {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { success: true, message: 'Aucun élément inconnu à enregistrer' };
+    }
+    
+    // Créer le répertoire des éléments inconnus si nécessaire
+    const unknownDir = path.join(__dirname, '../data/unknown-items');
+    await fs.mkdir(unknownDir, { recursive: true });
+    
+    // Créer un fichier pour les éléments inconnus
+    const timestamp = new Date().toISOString().replace(/:/g, '-');
+    const filePath = path.join(unknownDir, `unknown_${location}_${timestamp}.json`);
+    
+    await fs.writeFile(filePath, JSON.stringify({
+      timestamp,
+      location,
+      items
+    }, null, 2), 'utf8');
+    
+    logger.info(`${items.length} éléments inconnus enregistrés dans ${filePath}`);
+    
+    return {
+      success: true,
+      saved: items.length,
+      file: filePath
+    };
+  } catch (error) {
+    logger.error(`Erreur lors de l'enregistrement des éléments inconnus: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Obtenir des statistiques d'inventaire
+ * @param {string} location - Emplacement (optionnel)
+ * @param {number} months - Nombre de mois à inclure
+ * @returns {Promise<Object>} - Statistiques d'inventaire
+ */
+async function getInventoryStats(location, months = 3) {
+  try {
+    const stats = {
+      totalProducts: 0,
+      mostTrackedProducts: [],
+      inventoryByLocation: {},
+      inventoryTrends: []
     };
     
-    // Check for exact test matches first
-    const lowercaseName = name.toLowerCase();
-    if (testCases[lowercaseName]) {
-      return { ...testCases[lowercaseName] };
+    // Récupérer tous les produits
+    const products = await getProducts(location);
+    stats.totalProducts = products.length;
+    
+    // Récupérer les périodes récentes
+    const periods = [];
+    const now = new Date();
+    
+    for (let i = 0; i < months; i++) {
+      const date = new Date(now);
+      date.setMonth(now.getMonth() - i);
+      periods.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
     }
     
-    // Then do fuzzy matching
-    for (const product of mockDatabase.products) {
-      if (product.name.toLowerCase().includes(lowercaseName) || 
-          lowercaseName.includes(product.name.toLowerCase())) {
-        return { ...product };
+    // Si un emplacement est spécifié, récupérer seulement les données pour cet emplacement
+    if (location) {
+      const inventoryData = [];
+      
+      for (const period of periods) {
+        const inventory = await googleSheetsService.getInventory(location, period);
+        inventoryData.push({ period, location, data: inventory });
+      }
+      
+      stats.inventoryTrends = inventoryData;
+    } else {
+      // Récupérer les données pour tous les emplacements configurés
+      const locations = [...config.voiceProcessing.locations];
+      
+      for (const loc of locations) {
+        stats.inventoryByLocation[loc] = {
+          totalItems: 0,
+          recentInventory: null
+        };
+        
+        // Récupérer l'inventaire le plus récent
+        const recentInventory = await googleSheetsService.getInventory(loc, periods[0]);
+        stats.inventoryByLocation[loc].totalItems = recentInventory.length;
+        stats.inventoryByLocation[loc].recentInventory = recentInventory;
       }
     }
     
-    return null;
+    return stats;
   } catch (error) {
-    logger.error(`Error finding product by name: ${error.message}`);
-    return null;
+    logger.error(`Erreur lors de la récupération des statistiques d'inventaire: ${error.message}`);
+    return { error: error.message };
   }
 }
 
-/**
- * Get inventory data by location
- * @param {string} location - Location to filter by
- * @returns {Promise<Array>} - Inventory items for the location
- */
-async function getInventoryByLocation(location) {
-  try {
-    logger.info(`Getting inventory data for location: ${location}`);
-    
-    if (!location) {
-      return [];
-    }
-    
-    return mockDatabase.inventory
-      .filter(item => item.location === location)
-      .map(item => ({ ...item }));
-  } catch (error) {
-    logger.error(`Error getting inventory by location: ${error.message}`);
-    return [];
-  }
->>>>>>> 886f868 (Push project copy to 28mars branch)
-}
-
-/**
- * Save inventory items to the database
- * @param {Object|Array} data - Inventory data to save
- * @returns {Promise<Object>} - Success information
- */
-async function saveInventoryItems(data) {
-  try {
-    // Handle different formats of data
-    const items = Array.isArray(data) ? data : (data && data.items ? data.items : []);
-    const location = data && data.location ? data.location : 'unknown';
-    
-    logger.info(`Saving inventory data for ${location}: ${items.length} items`);
-    
-    if (items.length === 0) {
-      return {
-        success: true,
-        savedCount: 0,
-        message: 'No items to save',
-        timestamp: new Date().toISOString()
-      };
-    }
-    
-    return {
-      success: true,
-      savedCount: items.length,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    logger.error(`Error saving inventory items: ${error.message}`);
-    return {
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    };
-  }
-}
-
-/**
- * Save unknown items for later review
- * @param {Object} data - Data about unrecognized items
- * @returns {Promise<Object>} - Success indicator
- */
-async function saveUnknownItems(data) {
-  try {
-    // Ensure data.items exists with a valid length property
-    const items = data && data.items ? data.items : [];
-    const location = data && data.location ? data.location : 'unknown';
-    
-    logger.info(`Saving unrecognized items for ${location}: ${items.length} items`);
-    
-    return {
-      success: true,
-      savedCount: items.length,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    logger.error(`Error saving unknown items: ${error.message}`);
-    return {
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    };
-  }
-}
-
-/**
- * Save invoice data to the database
- * @param {Object} invoice - Invoice data to save
- * @returns {Promise<Object>} - Saved invoice information
- */
-async function saveInvoice(invoice) {
-  try {
-    logger.info(`Saving invoice data`);
-    
-    if (!invoice) {
-      throw new Error('Invoice data is required');
-    }
-    
-    // Generate a unique ID if not provided
-    const savedInvoice = {
-      ...invoice,
-      id: invoice.id || 'INV-' + Date.now()
-    };
-    
-    return {
-      id: savedInvoice.id,
-      success: true,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    logger.error(`Error saving invoice: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * Add a new product to the database
- * @param {Object} product - Product data to add
- * @returns {Promise<Object>} - Added product information
- */
-async function addProduct(product) {
-  try {
-    if (!product || !product.name) {
-      throw new Error('Product data with name is required');
-    }
-    
-    logger.info(`Adding new product: ${product.name}`);
-    
-    const newProduct = {
-      ...product,
-      id: product.id || mockDatabase.products.length + 1
-    };
-    
-    return {
-      ...newProduct,
-      success: true,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    logger.error(`Error adding product: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * Get all products
- * @param {Object} options - Filter options
- * @returns {Promise<Array>} - List of products
- */
-async function getProducts(options = {}) {
-  try {
-    logger.info('Getting all products');
-    
-    let products = [...mockDatabase.products];
-    
-    // Apply location filter if specified
-    if (options.location) {
-      products = products.filter(p => p.location === options.location);
-    }
-    
-    return products.map(p => ({ ...p }));
-  } catch (error) {
-    logger.error(`Error getting products: ${error.message}`);
-    return [];
-  }
-}
-
-/**
- * Get invoice by ID
- * @param {string} id - Invoice ID
- * @returns {Promise<Object|null>} - Invoice data or null if not found
- */
-async function getInvoiceById(id) {
-  try {
-    logger.info(`Getting invoice by ID: ${id}`);
-    
-    if (!id) {
-      return null;
-    }
-    
-    const invoice = mockDatabase.invoices.find(inv => inv.id === id);
-    return invoice ? { ...invoice } : null;
-  } catch (error) {
-    logger.error(`Error getting invoice by ID: ${error.message}`);
-    return null;
-  }
-}
-
-// Export all functions for testing
 module.exports = {
+  getProducts,
   findProductByName,
   saveInventoryItems,
+  addOrUpdateProduct,
+  getInventory,
   saveUnknownItems,
-  saveInvoice,
-  getProducts,
-  getInventoryByLocation,
-<<<<<<< HEAD
-  getUserById: async (id) => ({ id, name: `User ${id}` }),
-  updateUser: async (user) => user,
-  checkUserAuthorization: async () => true,
-  createUser: async (user) => user,
-  getDocument: async () => ({ data: 'test' })
-=======
-  getInvoiceById
->>>>>>> 886f868 (Push project copy to 28mars branch)
+  getInventoryStats
 };
