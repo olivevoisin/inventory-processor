@@ -1,15 +1,20 @@
 /**
  * Invoice Service Module
 <<<<<<< HEAD
+<<<<<<< HEAD
  * Coordinates invoice processing operations
 =======
  * Handles invoice processing operations
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+ * Handles processing of invoice files for inventory
+>>>>>>> backup-main
  */
 const fs = require('fs').promises;
 const path = require('path');
 const invoiceProcessor = require('./invoice-processor');
 const translationService = require('./translation-service');
+<<<<<<< HEAD
 <<<<<<< HEAD
 const databaseUtils = require('../utils/database-utils');
 const logger = require('../utils/logger');
@@ -45,6 +50,10 @@ async function processInvoices(sourceDir, processedDir) {
 const dbUtils = require('../utils/database-utils');
 const logger = require('../utils/logger');
 const config = require('../config');
+=======
+const dbUtils = require('../utils/database-utils');
+const logger = require('../utils/logger');
+>>>>>>> backup-main
 
 /**
  * Process all invoices in a directory
@@ -60,6 +69,7 @@ async function processInvoices(sourceDir, processedDir) {
     await fs.mkdir(processedDir, { recursive: true });
     
     // Get all PDF files in the source directory
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
     const files = await fs.readdir(sourceDir);
     const pdfFiles = files.filter(file => file.toLowerCase().endsWith('.pdf'));
@@ -83,6 +93,11 @@ async function processInvoices(sourceDir, processedDir) {
 
     for (const file of invoiceFiles) {
 =======
+=======
+    const files = await fs.readdir(sourceDir);
+    const pdfFiles = files.filter(file => file.toLowerCase().endsWith('.pdf'));
+    
+>>>>>>> backup-main
     if (pdfFiles.length === 0) {
       logger.info('No PDF files found to process');
       return {
@@ -97,11 +112,15 @@ async function processInvoices(sourceDir, processedDir) {
     
     // Process each invoice file
     for (const file of pdfFiles) {
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+>>>>>>> backup-main
       const filePath = path.join(sourceDir, file);
       const processedPath = path.join(processedDir, file);
       
       try {
+<<<<<<< HEAD
 <<<<<<< HEAD
         // Default location (can be improved with better logic)
         const location = 'Bar';
@@ -113,6 +132,11 @@ async function processInvoices(sourceDir, processedDir) {
         // Process the invoice
         logger.info(`Processing invoice: ${file}`);
         const result = await invoiceProcessor.processInvoice(filePath, 'Bar');
+=======
+        // Process the invoice
+        logger.info(`Processing invoice: ${file}`);
+        const result = await processSingleInvoice(filePath, 'Bar'); // Default location
+>>>>>>> backup-main
         
         // Save invoice data to database
         await dbUtils.saveInvoice({
@@ -132,11 +156,15 @@ async function processInvoices(sourceDir, processedDir) {
           }))
         });
         
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+>>>>>>> backup-main
         // Move file to processed directory
         await fs.rename(filePath, processedPath);
         
         processed++;
+<<<<<<< HEAD
 <<<<<<< HEAD
         results.push({
           file,
@@ -158,6 +186,20 @@ async function processInvoices(sourceDir, processedDir) {
     logger.info(`Completed processing ${processed} invoices with ${errors} errors`);
     
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+      } catch (error) {
+        // Format error message to match test expectation
+        logger.error(`Error processing invoice ${file}: ${error.message}`, { 
+          file,
+          error: error.message
+        });
+        errors++;
+      }
+    }
+    
+    logger.info(`Completed processing ${processed} invoices with ${errors} errors`);
+    
+>>>>>>> backup-main
     return {
       success: true,
       processed,
@@ -165,32 +207,46 @@ async function processInvoices(sourceDir, processedDir) {
     };
   } catch (error) {
 <<<<<<< HEAD
+<<<<<<< HEAD
     logger.error(`Error in invoice processing: ${error.message}`);
     return {
       success: false,
       error: error.message
 =======
     logger.error(`Invoice processing failed: ${error.message}`);
+=======
+    // Format error message to match test expectation
+    logger.error(`Invoice processing failed: ${error.message}`, {
+      error: error.message
+    });
+>>>>>>> backup-main
     return {
       success: false,
       processed: 0,
       errors: 1,
       message: error.message
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+>>>>>>> backup-main
     };
   }
 }
 
 /**
 <<<<<<< HEAD
+<<<<<<< HEAD
  * Save invoice data to inventory
  * @param {Object} invoiceData - Processed invoice data
  * @returns {Promise<Object>} - Database save result
 =======
+=======
+>>>>>>> backup-main
  * Process a single invoice file
  * @param {string} filePath - Path to the invoice file
  * @param {string} location - Location (Bar, Kitchen, etc.)
  * @returns {Promise<Object>} - Processed invoice data
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
  */
 async function saveInvoiceToInventory(invoiceData) {
@@ -220,6 +276,21 @@ async function saveInvoiceToInventory(invoiceData) {
     
     // Check if products exist in database and add if needed
     for (const item of invoiceData.items) {
+=======
+ */
+async function processSingleInvoice(filePath, location) {
+  try {
+    // Extract invoice data using OCR
+    const invoiceData = await invoiceProcessor.extractInvoiceData(filePath);
+    
+    // Translate items from Japanese to English/French
+    // Add a check to ensure invoiceData.items exists
+    const items = invoiceData && invoiceData.items ? invoiceData.items : [];
+    const translatedItems = await translationService.translateItems(items);
+    
+    // Check if products exist in database and add if needed
+    for (const item of translatedItems) {
+>>>>>>> backup-main
       const existingProduct = await dbUtils.findProductByName(item.product);
       
       if (!existingProduct) {
@@ -240,14 +311,29 @@ async function saveInvoiceToInventory(invoiceData) {
     }
     
     // Return the processed invoice data
+<<<<<<< HEAD
     return invoiceData;
   } catch (error) {
     logger.error(`Error processing invoice ${filePath}: ${error.message}`);
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+    return {
+      ...invoiceData,
+      items: translatedItems,
+      location
+    };
+  } catch (error) {
+    // Format error message to match test expectation
+    logger.error(`Error processing invoice`, {
+      filePath,
+      error: error.message
+    });
+>>>>>>> backup-main
     throw error;
   }
 }
 
+<<<<<<< HEAD
 /**
 <<<<<<< HEAD
  * Process a single invoice
@@ -366,3 +452,9 @@ module.exports = {
   stopScheduler,
   getInvoiceHistory
 };
+=======
+module.exports = {
+  processInvoices,
+  processSingleInvoice
+};
+>>>>>>> backup-main

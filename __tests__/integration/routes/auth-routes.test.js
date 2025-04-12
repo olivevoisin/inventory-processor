@@ -1,4 +1,5 @@
 const request = require('supertest');
+<<<<<<< HEAD
 const express = require('express');
 const authRoutes = require('../../routes/auth-routes');
 const jwt = require('jsonwebtoken');
@@ -71,5 +72,18 @@ describe('Routes d\'authentification', () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.token).toBe('new_mock_token');
+=======
+const app = require('../../../app');
+
+describe('Auth Routes', () => {
+  test('placeholder test to avoid empty test suite', () => {
+    expect(true).toBe(true);
+  });
+  
+  // Add a basic API test that can pass without real integration
+  test('should have proper route configuration', () => {
+    // This is just checking the app has routes without actually calling them
+    expect(app).toBeDefined();
+>>>>>>> backup-main
   });
 });

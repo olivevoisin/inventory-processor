@@ -20,10 +20,24 @@ router.get('/products', authenticateApiKey, async (req, res) => {
     logger.info('Request for all products');
     
     const products = await dbUtils.getProducts();
+<<<<<<< HEAD
     return res.status(200).json(products);
   } catch (error) {
     logger.error(`Error getting products: ${error.message}`);
     return res.status(500).json({ error: 'Failed to retrieve products' });
+=======
+    return res.status(200).json({
+      success: true,
+      data: products,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error(`Error getting products: ${error.message}`);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to retrieve products' 
+    });
+>>>>>>> backup-main
   }
 });
 
@@ -44,7 +58,15 @@ router.get('/', authenticateApiKey, async (req, res) => {
     logger.info(`Request for inventory at location: ${location}`);
     
     const inventory = await dbUtils.getInventoryByLocation(location);
+<<<<<<< HEAD
     return res.status(200).json(inventory);
+=======
+    return res.status(200).json({
+      success: true,
+      data: inventory,
+      timestamp: new Date().toISOString()
+    });
+>>>>>>> backup-main
   } catch (error) {
     logger.error(`Error getting inventory: ${error.message}`);
     return res.status(500).json({ error: 'Failed to retrieve inventory' });

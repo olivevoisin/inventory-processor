@@ -5,6 +5,7 @@ const os = require('os');
 const logger = require('./logger');
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 // Compteurs d'utilisation
 let apiCalls = {};
 let errors = {};
@@ -12,6 +13,8 @@ let startTime = Date.now();
 let responseTimes = [];
 const MAX_RESPONSE_TIMES = 1000;
 =======
+=======
+>>>>>>> backup-main
 // Metrics collection
 const metrics = {
   apiCalls: {},
@@ -20,12 +23,16 @@ const metrics = {
   lastResetTime: Date.now(),
   responseTimes: []
 };
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+>>>>>>> backup-main
 
 /**
  * Record API endpoint usage
  * @param {string} endpoint - API endpoint name
  */
+<<<<<<< HEAD
 <<<<<<< HEAD
 function recordApiUsage(endpoint, method = 'GET') {
   const key = endpoint;
@@ -37,11 +44,17 @@ function recordApiUsage(endpoint) {
   if (!metrics.apiCalls[endpoint]) {
     metrics.apiCalls[endpoint] = 0;
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+function recordApiUsage(endpoint) {
+  if (!metrics.apiCalls[endpoint]) {
+    metrics.apiCalls[endpoint] = 0;
+>>>>>>> backup-main
   }
   metrics.apiCalls[endpoint]++;
 }
 
 /**
+<<<<<<< HEAD
 <<<<<<< HEAD
  * Enregistre une erreur
  * @param {Error|string} error - Erreur à enregistrer
@@ -55,6 +68,8 @@ function recordError(error, source = 'unknown') {
   } else if (typeof error === 'string') {
     errorType = 'UnknownError';
 =======
+=======
+>>>>>>> backup-main
  * Record error occurrence
  * @param {Error} error - Error object
  * @param {string} source - Error source
@@ -67,6 +82,7 @@ function recordError(error, source = 'unknown') {
   
   if (!metrics.errors[key]) {
     metrics.errors[key] = 0;
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
   }
   metrics.errors[key]++;
@@ -126,6 +142,12 @@ function getMetrics() {
 =======
   logger.error(`Error in ${errorSource}: ${error.message}`);
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+  }
+  metrics.errors[key]++;
+  
+  logger.error(`Error in ${errorSource}: ${error.message}`);
+>>>>>>> backup-main
 }
 
 /**
@@ -175,6 +197,7 @@ function getSystemHealth() {
     used: os.totalmem() - os.freemem()
   };
 <<<<<<< HEAD
+<<<<<<< HEAD
   
   // Récupérer l'utilisation du CPU
   const cpu = os.loadavg()[0]; // Changed to number to match test expectation
@@ -197,6 +220,8 @@ function getSystemHealth() {
     timestamp: new Date().toISOString(),
     metrics // Add metrics property to match test expectations
 =======
+=======
+>>>>>>> backup-main
   const cpuUsage = os.loadavg()[0]; // 1 minute load average
   
   return {
@@ -205,7 +230,10 @@ function getSystemHealth() {
     memory,
     cpu: cpuUsage,
     metrics: getMetrics()
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+>>>>>>> backup-main
   };
 }
 
@@ -213,6 +241,7 @@ function getSystemHealth() {
  * Reset metrics
  */
 function resetMetrics() {
+<<<<<<< HEAD
 <<<<<<< HEAD
   apiCalls = {};
   errors = {};
@@ -241,6 +270,8 @@ function shutdown() {
   // Aucune action nécessaire pour le moment
   // Ce serait utile s'il y avait des intervalles à effacer
 =======
+=======
+>>>>>>> backup-main
   metrics.apiCalls = {};
   metrics.errors = {};
   metrics.lastResetTime = Date.now();
@@ -252,7 +283,10 @@ function shutdown() {
  */
 function shutdown() {
   logger.info('Shutting down monitoring');
+<<<<<<< HEAD
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+>>>>>>> backup-main
 }
 
 module.exports = {
@@ -263,6 +297,7 @@ module.exports = {
   getSystemHealth,
   resetMetrics,
 <<<<<<< HEAD
+<<<<<<< HEAD
   shutdown,
   __getInternalMetricsForTest,
   // For backward compatibility
@@ -272,4 +307,7 @@ module.exports = {
 =======
   shutdown
 >>>>>>> 886f868 (Push project copy to 28mars branch)
+=======
+  shutdown
+>>>>>>> backup-main
 };

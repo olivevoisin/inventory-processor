@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dependencies
 node_modules/
 npm-debug.log
@@ -37,3 +38,9 @@ temp/
 .vscode/
 *.sublime-workspace
 *.sublime-project
+=======
+node_modules/
+.env
+logs/
+uploads/
+>>>>>>> backup-main

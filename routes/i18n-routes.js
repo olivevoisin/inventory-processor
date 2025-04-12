@@ -3,6 +3,12 @@
  */
 const express = require('express');
 const router = express.Router();
+<<<<<<< HEAD
+=======
+const translationService = require('../modules/translation-service');
+const logger = require('../utils/logger');
+const { authenticateApiKey } = require('../middleware/auth');
+>>>>>>> backup-main
 
 // Langues disponibles
 const AVAILABLE_LANGUAGES = ['fr', 'en'];
@@ -162,4 +168,172 @@ router.get('/translate/:key', (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 module.exports = router;
+=======
+/**
+ * Translate text from source to target language
+ * POST /api/i18n/translate
+ */
+router.post('/translate', authenticateApiKey, async (req, res) => {
+  try {
+    const { text, source, target } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Text to translate is required'
+      });
+    }
+    
+    if (!target) {
+      return res.status(400).json({
+        success: false,
+        error: 'Target language is required'
+      });
+    }
+    
+    // Auto-detect source language if not provided
+    let sourceLanguage = source;
+    if (!sourceLanguage) {
+      sourceLanguage = await translationService.detectLanguage(text);
+      logger.info(`Detected language: ${sourceLanguage} for text: ${text.substring(0, 20)}...`);
+    }
+    
+    const translated = await translationService.translate(text, sourceLanguage, target);
+    
+    return res.status(200).json({
+      success: true,
+      original: text,
+      translated,
+      source: sourceLanguage,
+      target
+    });
+  } catch (error) {
+    logger.error(`Translation error: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      error: 'Translation failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Batch translate array of texts
+ * POST /api/i18n/batch-translate
+ */
+router.post('/batch-translate', authenticateApiKey, async (req, res) => {
+  try {
+    const { texts, source, target } = req.body;
+    
+    if (!texts) {
+      return res.status(400).json({
+        success: false,
+        error: 'Texts to translate are required'
+      });
+    }
+    
+    if (!Array.isArray(texts)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Texts must be an array'
+      });
+    }
+    
+    if (!target) {
+      return res.status(400).json({
+        success: false,
+        error: 'Target language is required'
+      });
+    }
+    
+    // Auto-detect source language from first text if not provided
+    let sourceLanguage = source;
+    if (!sourceLanguage && texts.length > 0) {
+      sourceLanguage = await translationService.detectLanguage(texts[0]);
+      logger.info(`Detected language: ${sourceLanguage} for batch of ${texts.length} texts`);
+    }
+    
+    const translated = await translationService.batchTranslate(texts, sourceLanguage, target);
+    
+    return res.status(200).json({
+      success: true,
+      original: texts,
+      translated,
+      source: sourceLanguage,
+      target
+    });
+  } catch (error) {
+    logger.error(`Batch translation error: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      error: 'Batch translation failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Detect language of text
+ * POST /api/i18n/detect-language
+ */
+router.post('/detect-language', authenticateApiKey, async (req, res) => {
+  try {
+    const { text } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Text is required'
+      });
+    }
+    
+    const language = await translationService.detectLanguage(text);
+    
+    return res.status(200).json({
+      success: true,
+      text,
+      language
+    });
+  } catch (error) {
+    logger.error(`Language detection error: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      error: 'Language detection failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Clear translation cache
+ * POST /api/i18n/clear-cache
+ */
+router.post('/clear-cache', authenticateApiKey, (req, res) => {
+  try {
+    translationService.clearCache();
+    
+    logger.info('Translation cache cleared');
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Translation cache cleared'
+    });
+  } catch (error) {
+    logger.error(`Error clearing translation cache: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to clear translation cache',
+      details: error.message
+    });
+  }
+});
+
+// Export router and variables for testing
+module.exports = router;
+// Export these for testing purposes
+module.exports.AVAILABLE_LANGUAGES = AVAILABLE_LANGUAGES;
+module.exports.DEFAULT_LANGUAGE = DEFAULT_LANGUAGE;
+module.exports.translations = translations;
+>>>>>>> backup-main
