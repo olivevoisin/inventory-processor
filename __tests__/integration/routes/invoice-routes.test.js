@@ -1,265 +1,295 @@
-// __tests__/integration/routes/invoice-routes.test.js
+/**
+ * Unit tests for invoice routes
+ */
+const { handlers } = require('../../../routes/invoice-routes');
+const invoiceService = require('../../../modules/invoice-service');
+const invoiceProcessor = require('../../../modules/invoice-processor');
+const databaseUtils = require('../../../utils/database-utils');
+const logger = require('../../../utils/logger');
 
-// Create mock implementations
-const mockInvoiceProcessor = {
-  processInvoice: jest.fn().mockResolvedValue({
-    extractedData: {
-      date: '2023年10月15日',
-      productCode: 'JPN-1234',
-      quantity: 20,
-      unitPrice: 2500,
-      totalAmount: 50000
-    },
-    translation: 'Facture\nDate: 15 Octobre 2023\nRéférence produit: JPN-1234\nQuantité: 20\nPrix unitaire: 2500 ¥\nMontant total: 50000 ¥',
-    inventoryUpdates: {
-      action: 'add',
-      sku: 'JPN-1234',
-      quantity: 20,
-      price: 2500,
-      source: 'invoice',
-      date: '2023年10月15日'
-    }
-  })
-};
+// Mock dependencies
+jest.mock('../../../modules/invoice-service', () => ({
+  processSingleInvoice: jest.fn(),
+  processInvoices: jest.fn()
+}));
 
-const mockDatabaseUtils = {
-  updateInventory: jest.fn().mockResolvedValue({
-    sku: 'JPN-1234',
-    quantity: 20,
-    location: 'WAREHOUSE',
-    lastUpdated: '2023-10-15'
-  }),
-  getInvoiceHistory: jest.fn().mockResolvedValue([
-    {
-      id: '1',
-      date: '2023-10-15',
-      filename: 'invoice1.pdf',
-      status: 'processed'
-    },
-    {
-      id: '2',
-      date: '2023-10-14',
-      filename: 'invoice2.pdf',
-      status: 'processed'
-    }
-  ])
-};
+jest.mock('../../../modules/invoice-processor', () => ({
+  getProcessingHistory: jest.fn()
+}));
 
-// Mock the modules
-jest.mock('../../../modules/invoice-processor', () => mockInvoiceProcessor);
-jest.mock('../../../utils/database-utils', () => mockDatabaseUtils);
+jest.mock('../../../utils/database-utils', () => ({
+  getInvoiceById: jest.fn()
+}));
+
 jest.mock('../../../utils/logger', () => ({
   info: jest.fn(),
   error: jest.fn(),
   warn: jest.fn(),
-  debug: jest.fn(),
-  startTimer: jest.fn().mockReturnValue({
-    done: jest.fn().mockReturnValue({ duration: 100 })
-  })
+  debug: jest.fn()
 }));
 
-// Mock multer for file uploads
-jest.mock('multer', () => {
-  const multerMock = () => ({
-    single: jest.fn().mockReturnValue((req, res, next) => {
-      req.file = {
-        buffer: Buffer.from('mock pdf content'),
-        originalname: 'invoice.pdf'
-      };
-      next();
-    })
-  });
-  
-  multerMock.diskStorage = jest.fn().mockImplementation(options => ({
-    _getDestination: options.destination,
-    _getFilename: options.filename
-  }));
-  
-  return multerMock;
-});
-
 describe('Invoice Routes', () => {
-  // Define test handlers
-  let processInvoiceHandler;
-  let getHistoryHandler;
-  
+  // Common test objects
+  let req, res;
+
   beforeEach(() => {
+    // Reset all mocks
     jest.clearAllMocks();
-    
-    // Define handlers that simulate the actual route handlers
-    processInvoiceHandler = async (req, res) => {
-      try {
-        if (!req.file) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'No invoice file uploaded' 
-          });
-        }
-        
-        // Process the invoice
-        const result = await mockInvoiceProcessor.processInvoice(req.file.buffer);
-        
-        // Update inventory if there are updates
-        if (result.inventoryUpdates) {
-          await mockDatabaseUtils.updateInventory(result.inventoryUpdates);
-        }
-        
-        return res.status(200).json({
-          success: true,
-          data: result
-        });
-      } catch (error) {
-        return res.status(500).json({
-          success: false,
-          error: error.message
-        });
-      }
+
+    // Create mock request and response objects
+    req = {
+      body: {},
+      params: {},
+      file: null
     };
-    
-    getHistoryHandler = async (req, res) => {
-      try {
-        const history = await mockDatabaseUtils.getInvoiceHistory();
-        
-        return res.status(200).json({
-          success: true,
-          data: history
-        });
-      } catch (error) {
-        return res.status(500).json({
-          success: false,
-          error: error.message
-        });
-      }
+
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis()
     };
   });
 
   describe('POST /api/invoices/process', () => {
-    it('should process uploaded invoice and return results', async () => {
-      // Create mock request and response
-      const req = {
-        file: {
-          buffer: Buffer.from('mock pdf content'),
-          originalname: 'invoice.pdf'
-        }
+    it('should process invoice file and return results', async () => {
+      // Setup mocks
+      req.file = {
+        path: '/tmp/invoice.pdf',
+        originalname: 'invoice.pdf'
       };
-      
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn()
-      };
+      req.body.location = 'WAREHOUSE';
 
-      // Call the handler
-      await processInvoiceHandler(req, res);
-      
+      invoiceService.processSingleInvoice.mockResolvedValue({
+        id: 'inv-123',
+        status: 'completed'
+      });
+
+      // Execute handler
+      await handlers.processSingleInvoice(req, res);
+
       // Assert
-      expect(mockInvoiceProcessor.processInvoice).toHaveBeenCalled();
-      expect(mockDatabaseUtils.updateInventory).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      expect(invoiceService.processSingleInvoice).toHaveBeenCalledWith(
+        '/tmp/invoice.pdf',
+        'WAREHOUSE'
+      );
+      expect(res.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({
-          extractedData: expect.anything(),
-          translation: expect.anything(),
-          inventoryUpdates: expect.anything()
+        result: expect.objectContaining({
+          id: 'inv-123'
         })
-      }));
+      });
     });
 
-    it('should handle missing invoice file', async () => {
-      // Create mock request without file and response
-      const req = {};
-      
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn()
-      };
+    it('should return 400 when no file is provided', async () => {
+      // Setup mocks - no file
+      req.body.location = 'WAREHOUSE';
 
-      // Call the handler
-      await processInvoiceHandler(req, res);
-      
+      // Execute handler
+      await handlers.processSingleInvoice(req, res);
+
       // Assert
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: expect.any(String)
-      }));
+        error: 'No file provided'
+      });
     });
 
-    it('should handle processing errors', async () => {
-      // Arrange
-      const req = {
-        file: {
-          buffer: Buffer.from('mock pdf content'),
-          originalname: 'invoice.pdf'
-        }
+    it('should return 400 when no location is provided', async () => {
+      // Setup mocks - file but no location
+      req.file = {
+        path: '/tmp/invoice.pdf',
+        originalname: 'invoice.pdf'
       };
-      
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn()
+
+      // Execute handler
+      await handlers.processSingleInvoice(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Location is required'
+      });
+    });
+
+    it('should return 500 when processing fails', async () => {
+      // Setup mocks
+      req.file = {
+        path: '/tmp/invoice.pdf',
+        originalname: 'invoice.pdf'
       };
-      
-      // Mock an error
-      mockInvoiceProcessor.processInvoice.mockRejectedValueOnce(new Error('OCR service error'));
-      
-      // Act
-      await processInvoiceHandler(req, res);
-      
+      req.body.location = 'WAREHOUSE';
+
+      invoiceService.processSingleInvoice.mockRejectedValue(
+        new Error('Processing error')
+      );
+
+      // Execute handler
+      await handlers.processSingleInvoice(req, res);
+
       // Assert
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: expect.any(String)
-      }));
+        error: 'Failed to process invoice',
+        details: 'Processing error'
+      });
+    });
+  });
+
+  describe('POST /api/invoices/process-batch', () => {
+    it('should process a batch of invoices and return results', async () => {
+      // Setup mocks
+      req.body = {
+        sourceDir: '/tmp/invoices',
+        processedDir: '/tmp/processed'
+      };
+
+      invoiceService.processInvoices.mockResolvedValue({
+        processed: 3,
+        failed: 0,
+        details: []
+      });
+
+      // Execute handler
+      await handlers.processBatchInvoices(req, res);
+
+      // Assert
+      expect(invoiceService.processInvoices).toHaveBeenCalledWith(
+        '/tmp/invoices',
+        '/tmp/processed'
+      );
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        result: expect.objectContaining({
+          processed: 3
+        })
+      });
+    });
+
+    it('should return 500 when batch processing fails', async () => {
+      // Setup mocks
+      req.body = {
+        sourceDir: '/tmp/invoices',
+        processedDir: '/tmp/processed'
+      };
+
+      invoiceService.processInvoices.mockRejectedValue(
+        new Error('Batch processing error')
+      );
+
+      // Execute handler
+      await handlers.processBatchInvoices(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Failed to process invoice batch',
+        details: 'Batch processing error'
+      });
     });
   });
 
   describe('GET /api/invoices/history', () => {
     it('should return invoice processing history', async () => {
-      // Create mock request and response
-      const req = {};
-      
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn()
-      };
+      // Setup mocks
+      invoiceProcessor.getProcessingHistory.mockResolvedValue([
+        { id: 'inv-123', date: '2023-10-15', status: 'completed' },
+        { id: 'inv-124', date: '2023-10-14', status: 'completed' }
+      ]);
 
-      // Call the handler
-      await getHistoryHandler(req, res);
-      
+      // Execute handler
+      await handlers.getInvoiceHistory(req, res);
+
       // Assert
-      expect(mockDatabaseUtils.getInvoiceHistory).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      expect(invoiceProcessor.getProcessingHistory).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.arrayContaining([
-          expect.objectContaining({ filename: 'invoice1.pdf' }),
-          expect.objectContaining({ filename: 'invoice2.pdf' })
+        history: expect.arrayContaining([
+          expect.objectContaining({ id: 'inv-123' }),
+          expect.objectContaining({ id: 'inv-124' })
         ])
-      }));
+      });
     });
 
-    it('should handle history retrieval errors', async () => {
-      // Arrange
-      const req = {};
-      
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn()
-      };
-      
-      // Mock an error
-      mockDatabaseUtils.getInvoiceHistory.mockRejectedValueOnce(new Error('Database error'));
-      
-      // Act
-      await getHistoryHandler(req, res);
-      
+    it('should return 500 when history retrieval fails', async () => {
+      // Setup mocks
+      invoiceProcessor.getProcessingHistory.mockRejectedValue(
+        new Error('Database error')
+      );
+
+      // Execute handler
+      await handlers.getInvoiceHistory(req, res);
+
       // Assert
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: expect.any(String)
-      }));
+        error: 'Failed to retrieve invoice history',
+        details: 'Database error'
+      });
+    });
+  });
+
+  describe('GET /api/invoices/:id', () => {
+    it('should return invoice by ID when found', async () => {
+      // Setup mocks
+      req.params.id = 'inv-123';
+      databaseUtils.getInvoiceById.mockResolvedValue({
+        id: 'inv-123',
+        date: '2023-10-15',
+        products: [{ code: 'JPN-1234', quantity: 20, price: 2500 }],
+        totalAmount: 50000
+      });
+
+      // Execute handler
+      await handlers.getInvoiceById(req, res);
+
+      // Assert
+      expect(databaseUtils.getInvoiceById).toHaveBeenCalledWith('inv-123');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        invoice: expect.objectContaining({
+          id: 'inv-123'
+        })
+      });
+    });
+
+    it('should return 404 when invoice is not found', async () => {
+      // Setup mocks
+      req.params.id = 'non-existent';
+      databaseUtils.getInvoiceById.mockResolvedValue(null);
+
+      // Execute handler
+      await handlers.getInvoiceById(req, res);
+
+      // Assert
+      expect(databaseUtils.getInvoiceById).toHaveBeenCalledWith('non-existent');
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Invoice not found'
+      });
+    });
+
+    it('should return 500 when database lookup fails', async () => {
+      // Setup mocks
+      req.params.id = 'inv-123';
+      databaseUtils.getInvoiceById.mockRejectedValue(
+        new Error('Database error')
+      );
+
+      // Execute handler
+      await handlers.getInvoiceById(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Database error'
+      });
     });
   });
 });

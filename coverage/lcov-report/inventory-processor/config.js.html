@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>3/3</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">60% </span>
+                <span class="strong">91.66% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>6/10</span>
+                <span class='fraction'>11/12</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>3/3</span>
+                <span class='fraction'>4/4</span>
             </div>
         
             
@@ -110,29 +110,25 @@
 <a name='L45'></a><a href='#L45'>45</a>
 <a name='L46'></a><a href='#L46'>46</a>
 <a name='L47'></a><a href='#L47'>47</a>
-<a name='L48'></a><a href='#L48'>48</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">35x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">35x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">35x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -156,50 +152,84 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">35x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
- * Configuration Module
- * Contains application configuration settings
+ * Application configuration
  */
+const path = require('path');
+&nbsp;
+// Load environment variables from .env file
 require('dotenv').config();
 &nbsp;
 const config = {
-  // Application info
+  // App info
   appName: 'Inventory Management System',
   version: '1.0.0',
-  environment: process.env.NODE_ENV || <span class="branch-1 cbranch-no" title="branch not covered" >'development',</span>
+  environment: process.env.NODE_ENV || 'development',
   
-  // Server settings
-  port: process.env.PORT || <span class="branch-1 cbranch-no" title="branch not covered" >8080,</span>
+  // Server
+  port: process.env.PORT || 8080,
   
-  // Google Sheets settings
-  googleSheets: {
-    apiKey: process.env.GOOGLE_SHEETS_API_KEY,
-    docId: process.env.GOOGLE_SHEETS_DOC_ID,
-    clientEmail: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
-    privateKey: process.env.GOOGLE_SHEETS_PRIVATE_KEY
+  // API
+  apiKey: process.env.API_KEY || <span class="branch-1 cbranch-no" title="branch not covered" >'test-api-key',</span>
+  
+  // File uploads
+  uploads: {
+    voiceDir: process.env.VOICE_DIR || path.join(__dirname, 'uploads', 'voice'),
+    invoiceDir: process.env.INVOICE_DIR || path.join(__dirname, 'uploads', 'invoices')
   },
   
-  // Voice processing settings
+  // Google APIs
+  googleSheets: {
+    apiKey: process.env.GOOGLE_SHEETS_API_KEY,
+    docId: process.env.GOOGLE_SHEETS_DOC_ID
+  },
+  
+  // Deepgram API
   deepgram: {
     apiKey: process.env.DEEPGRAM_API_KEY
   },
   
-  // Translation settings
+  // Translation
   translation: {
     apiKey: process.env.TRANSLATION_API_KEY
   },
   
-  // Upload directories
-  uploads: {
-    voiceDir: process.env.VOICE_UPLOAD_DIR || './uploads/voice',
-    invoiceDir: process.env.INVOICE_UPLOAD_DIR || <span class="branch-1 cbranch-no" title="branch not covered" >'./uploads/invoices'</span>
+  // Invoice processing
+  invoiceProcessing: {
+    enabled: process.env.INVOICE_PROCESSING_ENABLED === 'true',
+    schedule: process.env.INVOICE_PROCESSING_SCHEDULE || '0 0 * * *' // Default: daily at midnight
   },
   
-  // Invoice processing settings
-  invoiceProcessing: {
-    enabled: process.env.ENABLE_INVOICE_PROCESSING !== 'false',
-    schedule: process.env.INVOICE_PROCESSING_SCHEDULE || <span class="branch-1 cbranch-no" title="branch not covered" >'0 0 * * *' </span>// Daily at midnight
+  // Health check
+  healthCheck: {
+    enabled: true,
+    detailedStatusEnabled: process.env.NODE_ENV !== 'production',
+    apiKey: process.env.HEALTH_CHECK_API_KEY
   }
 };
 &nbsp;
@@ -211,7 +241,7 @@ module.exports = config;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-03-27T01:24:16.195Z
+                at 2025-04-12T00:38:04.010Z
             </div>
         <script src="../prettify.js"></script>
         <script>

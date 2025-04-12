@@ -1,6 +1,5 @@
 /**
- * Error Handler Module
- * Custom error classes and error handling utilities
+ * Error handling utilities
  */
 const logger = require('./logger');
 
@@ -8,17 +7,16 @@ const logger = require('./logger');
  * Base custom error class
  */
 class AppError extends Error {
-  constructor(message, status = 500) {
+  constructor(message, status) {
     super(message);
     this.name = this.constructor.name;
     this.status = status;
-    this.statusCode = status; // For compatibility
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
 /**
- * Error for invalid input data
+ * Validation error - thrown when request data is invalid
  */
 class ValidationError extends AppError {
   constructor(message, fields = {}) {
@@ -28,68 +26,173 @@ class ValidationError extends AppError {
 }
 
 /**
- * Error for authentication failures
+ * Authentication error - thrown when authentication fails
  */
 class AuthenticationError extends AppError {
-  constructor(message = 'Authentication failed') {
+  constructor(message) {
     super(message, 401);
   }
 }
 
 /**
- * Error for authorization failures
+ * Authorization error - thrown when user lacks permissions
  */
 class AuthorizationError extends AppError {
-  constructor(message = 'Not authorized') {
+  constructor(message) {
     super(message, 403);
   }
 }
 
 /**
- * Error for resource not found
+ * Not found error - thrown when resource is not found
  */
 class NotFoundError extends AppError {
-  constructor(resource = 'Resource', id = '') {
-    const message = id ? `${resource} with ID '${id}' not found` : `${resource} not found`;
+  constructor(message) {
     super(message, 404);
-    this.resource = resource;
-    this.resourceId = id;
   }
 }
 
 /**
- * Error for database operation failures
+ * Conflict error - thrown when resource already exists
  */
-class DatabaseError extends AppError {
+class ConflictError extends AppError {
+  constructor(message) {
+    super(message, 409);
+  }
+}
+
+/**
+ * Rate limit error - thrown when request limit is exceeded
+ */
+class RateLimitError extends AppError {
+  constructor(message) {
+    super(message, 429);
+  }
+}
+
+/**
+ * External service error - thrown when external service fails
+ */
+class ExternalServiceError extends AppError {
+  constructor(service, message) {
+    super(message, 502);
+    this.service = service;
+  }
+}
+
+/**
+ * Internal error - thrown for unexpected server errors
+ */
+class InternalError extends AppError {
   constructor(message) {
     super(message, 500);
   }
 }
 
 /**
- * Error for external service failures
+ * Create a ValidationError
+ * @param {string} message - Error message
+ * @param {Object} fields - Invalid fields details
+ * @returns {ValidationError} Validation error
  */
-class ExternalServiceError extends AppError {
-  constructor(service, message, originalError = null) {
-    super(`${service} service error: ${message}`, 502);
-    this.service = service;
-    this.originalError = originalError;
-  }
+function createValidationError(message, fields) {
+  return new ValidationError(message, fields);
 }
 
 /**
- * Error for API-related failures
+ * Create an AuthenticationError
+ * @param {string} message - Error message
+ * @returns {AuthenticationError} Authentication error
  */
-class APIError extends AppError {
-  constructor(message, statusCode = 500) {
-    super(message, statusCode);
-  }
+function createAuthenticationError(message) {
+  return new AuthenticationError(message);
 }
 
 /**
- * Handle error in async routes
- * @param {Function} fn - Async route handler
- * @returns {Function} - Express middleware function
+ * Create an AuthorizationError
+ * @param {string} message - Error message
+ * @returns {AuthorizationError} Authorization error
+ */
+function createAuthorizationError(message) {
+  return new AuthorizationError(message);
+}
+
+/**
+ * Create a NotFoundError
+ * @param {string} message - Error message
+ * @returns {NotFoundError} Not found error
+ */
+function createNotFoundError(message) {
+  return new NotFoundError(message);
+}
+
+/**
+ * Create a ConflictError
+ * @param {string} message - Error message
+ * @returns {ConflictError} Conflict error
+ */
+function createConflictError(message) {
+  return new ConflictError(message);
+}
+
+/**
+ * Create a RateLimitError
+ * @param {string} message - Error message
+ * @returns {RateLimitError} Rate limit error
+ */
+function createRateLimitError(message) {
+  return new RateLimitError(message);
+}
+
+/**
+ * Create an ExternalServiceError
+ * @param {string} service - Service name
+ * @param {string} message - Error message
+ * @returns {ExternalServiceError} External service error
+ */
+function createExternalServiceError(service, message) {
+  return new ExternalServiceError(service, message);
+}
+
+/**
+ * Create an InternalError
+ * @param {string} message - Error message
+ * @returns {InternalError} Internal error
+ */
+function createInternalError(message) {
+  return new InternalError(message);
+}
+
+/**
+ * Global error middleware
+ * @param {Error} err - Error object
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+function errorMiddleware(err, req, res, next) {
+  const statusCode = err.status || 500;
+  const errorMessage = err.message || 'Internal server error';
+  
+  // Log error
+  logger.error(`API Error: ${errorMessage}`, {
+    statusCode,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+  
+  // Send error response
+  res.status(statusCode).json({
+    success: false,
+    error: errorMessage
+  });
+}
+
+/**
+ * Async handler to wrap async route handlers
+ * @param {Function} fn - Async function to wrap
+ * @returns {Function} Express middleware
  */
 function asyncHandler(fn) {
   return (req, res, next) => {
@@ -97,57 +200,25 @@ function asyncHandler(fn) {
   };
 }
 
-/**
- * Global error handler middleware
- * @param {Error} err - Error object
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next function
- */
-function errorMiddleware(err, req, res, next) {
-  // Log error details
-  logger.error(`${err.name}: ${err.message}`);
-  
-  if (err.stack) {
-    logger.debug(err.stack);
-  }
-  
-  // Default error status and message
-  const status = err.status || 500;
-  const message = err.message || 'Something went wrong';
-  
-  // Send error response
-  res.status(status).json({
-    success: false,
-    error: message
-  });
-}
-
-/**
- * Main error handling function for easier testing
- */
-function handleError(err, req, res) {
-  const status = err.status || 500;
-  const message = err.message || 'An error occurred';
-  
-  res.status(status).json({
-    success: false,
-    error: message
-  });
-}
-
 module.exports = {
-  AppError,
   ValidationError,
   AuthenticationError,
   AuthorizationError,
   NotFoundError,
-  DatabaseError,
+  ConflictError,
+  RateLimitError,
   ExternalServiceError,
-  APIError,
-  asyncHandler,
+  InternalError,
+  
+  createValidationError,
+  createAuthenticationError,
+  createAuthorizationError,
+  createNotFoundError,
+  createConflictError,
+  createRateLimitError,
+  createExternalServiceError,
+  createInternalError,
+  
   errorMiddleware,
-  handleError,
-  // Export this for testing
-  globalErrorHandler: errorMiddleware
+  asyncHandler
 };

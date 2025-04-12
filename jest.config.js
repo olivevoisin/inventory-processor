@@ -1,35 +1,24 @@
-// jest.config.js
 module.exports = {
-  // Test environment
   testEnvironment: 'node',
-  
-  // Files to test
-  testMatch: ['**/__tests__/**/*.test.js'],
-  
-  // Verbose output
   verbose: true,
-  
-  // Setup files
-  setupFilesAfterEnv: ['./__tests__/setup.js'],
-  
-  // Mock settings
-  automock: false,
-  
-  // Module directories where Jest should look for modules
-  moduleDirectories: ['node_modules', __dirname],
-  
-  // Coverage configuration
+  testMatch: ['**/__tests__/**/*.test.js'],
   collectCoverage: true,
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  collectCoverageFrom: [
-    'modules/**/*.js',
-    'routes/**/*.js',
-    'utils/**/*.js',
-    'middleware/**/*.js',
-    '!**/node_modules/**',
-    '!**/__tests__/**',
-    '!**/__mocks__/**',
-    '!**/coverage/**'
-  ]
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    '/__tests__/',
+    '/__mocks__/'
+  ],
+  moduleNameMapper: {
+    "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": 
+      "<rootDir>/__mocks__/fileMock.js",
+    "\\.(css|less)$": "<rootDir>/__mocks__/styleMock.js"
+  },
+  setupFiles: ['<rootDir>/jest.setup.js'],
+  setupFilesAfterEnv: ['./__tests__/setup.js'],
+  testTimeout: 30000,
+  testPathIgnorePatterns: ['/node_modules/', '/.history/'],
+  transform: {
+    '^.+\\.jsx?$': 'babel-jest'
+  }
 };

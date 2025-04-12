@@ -1,9 +1,8 @@
-# .github/workflows/deploy.yml
 name: Deploy
 
 on:
   push:
-    branches: [main] # Ensure this matches your default branch
+    branches: [main]
 
 jobs:
   deploy:
@@ -25,13 +24,13 @@ jobs:
         run: npm test
       
       - name: Deploy to staging
-        uses: appleboy/ssh-action@v0.1.0 # Use a specific version
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USERNAME }}
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
-            cd /../inventory-processor_copy
+            cd /path/to/app
             git pull
             npm ci
             npm run build
@@ -46,7 +45,7 @@ jobs:
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_CHANNEL: deployments # Ensure no '#' symbol
+          SLACK_CHANNEL: deployments
           SLACK_TITLE: Inventory Processor Deployment
           SLACK_MESSAGE: 'Successfully deployed to staging'
           SLACK_COLOR: good

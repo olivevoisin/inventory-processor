@@ -2,30 +2,30 @@ const request = require('supertest');
 const express = require('express');
 const authRoutes = require('../../routes/auth-routes');
 const jwt = require('jsonwebtoken');
-const { globalErrorHandler } = require('../../utils/error-handler');
+const globalErrorHandler = require('../../middleware/globalErrorHandler'); // Ensure proper import
 
-// Mock des dépendances
+// Mock dependencies
 jest.mock('jsonwebtoken');
 
-// App Express pour les tests
+// App Express for tests
 const app = express();
 app.use(express.json());
 app.use('/api/auth', authRoutes);
-app.use(globalErrorHandler);
+app.use(globalErrorHandler); // Ensure this is a valid middleware function
 
 describe('Routes d\'authentification', () => {
-  test('POST /api/auth/login devrait authentifier un utilisateur valide', async () => {
+  test('POST /api/auth/login should authenticate a valid user', async () => {
     jwt.sign.mockReturnValue('mock_token');
-    
+
     const response = await request(app)
       .post('/api/auth/login')
       .send({ username: 'admin', password: 'password' });
-    
+
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('token');
     expect(response.body.success).toBe(true);
   });
-  
+
   test('POST /api/auth/login devrait refuser un utilisateur invalide', async () => {
     const response = await request(app)
       .post('/api/auth/login')

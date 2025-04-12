@@ -1,6 +1,6 @@
 /**
  * Invoice Service Module
- * Handles invoice processing operations
+ * Handles processing of invoice files for inventory
  */
 const fs = require('fs').promises;
 const path = require('path');
@@ -8,7 +8,6 @@ const invoiceProcessor = require('./invoice-processor');
 const translationService = require('./translation-service');
 const dbUtils = require('../utils/database-utils');
 const logger = require('../utils/logger');
-const config = require('../config');
 
 /**
  * Process all invoices in a directory
@@ -47,7 +46,7 @@ async function processInvoices(sourceDir, processedDir) {
       try {
         // Process the invoice
         logger.info(`Processing invoice: ${file}`);
-        const result = await invoiceProcessor.processInvoice(filePath, 'Bar');
+        const result = await processSingleInvoice(filePath, 'Bar'); // Default location
         
         // Save invoice data to database
         await dbUtils.saveInvoice({
@@ -72,7 +71,11 @@ async function processInvoices(sourceDir, processedDir) {
         
         processed++;
       } catch (error) {
-        logger.error(`Error processing invoice ${file}: ${error.message}`);
+        // Format error message to match test expectation
+        logger.error(`Error processing invoice ${file}: ${error.message}`, { 
+          file,
+          error: error.message
+        });
         errors++;
       }
     }
@@ -85,7 +88,10 @@ async function processInvoices(sourceDir, processedDir) {
       errors
     };
   } catch (error) {
-    logger.error(`Invoice processing failed: ${error.message}`);
+    // Format error message to match test expectation
+    logger.error(`Invoice processing failed: ${error.message}`, {
+      error: error.message
+    });
     return {
       success: false,
       processed: 0,
@@ -103,11 +109,16 @@ async function processInvoices(sourceDir, processedDir) {
  */
 async function processSingleInvoice(filePath, location) {
   try {
-    // Process the invoice
-    const invoiceData = await invoiceProcessor.processInvoice(filePath, location);
+    // Extract invoice data using OCR
+    const invoiceData = await invoiceProcessor.extractInvoiceData(filePath);
+    
+    // Translate items from Japanese to English/French
+    // Add a check to ensure invoiceData.items exists
+    const items = invoiceData && invoiceData.items ? invoiceData.items : [];
+    const translatedItems = await translationService.translateItems(items);
     
     // Check if products exist in database and add if needed
-    for (const item of invoiceData.items) {
+    for (const item of translatedItems) {
       const existingProduct = await dbUtils.findProductByName(item.product);
       
       if (!existingProduct) {
@@ -128,32 +139,22 @@ async function processSingleInvoice(filePath, location) {
     }
     
     // Return the processed invoice data
-    return invoiceData;
+    return {
+      ...invoiceData,
+      items: translatedItems,
+      location
+    };
   } catch (error) {
-    logger.error(`Error processing invoice ${filePath}: ${error.message}`);
+    // Format error message to match test expectation
+    logger.error(`Error processing invoice`, {
+      filePath,
+      error: error.message
+    });
     throw error;
   }
 }
 
-/**
- * Start the invoice processing scheduler
- */
-function startScheduler() {
-  // This would set up a scheduler to periodically process invoices
-  logger.info('Invoice scheduler started');
-}
-
-/**
- * Stop the invoice processing scheduler
- */
-function stopScheduler() {
-  // This would stop the scheduler
-  logger.info('Invoice scheduler stopped');
-}
-
 module.exports = {
   processInvoices,
-  processSingleInvoice,
-  startScheduler,
-  stopScheduler
+  processSingleInvoice
 };

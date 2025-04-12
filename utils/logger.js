@@ -15,14 +15,14 @@ const logger = {
   },
   
   error: function(message, meta = {}) {
-    if (process.env.NODE_ENV === 'test' && message.includes('test error in test env')) {
-      return;
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(`[ERROR] ${message}`, meta);
     }
-    console.error(`[ERROR] ${message}`, meta);
   },
   
   warn: function(message, meta = {}) {
-    if (process.env.NODE_ENV === 'test' && message.includes('test warning in test env')) {
+    // In test environment, do not output warnings
+    if (process.env.NODE_ENV === 'test') {
       return;
     }
     console.warn(`[WARN] ${message}`, meta);

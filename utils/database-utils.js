@@ -1,270 +1,276 @@
 /**
- * Database Utilities Module
- * Handles database operations for inventory management
+ * Database utilities module for inventory management system with dependency injection
  */
-const logger = require('./logger');
 
-// Mock database for testing
-const mockDatabase = {
-  products: [
-    { id: 1, name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99', location: 'Bar' },
-    { id: 2, name: 'Wine Cabernet', unit: 'bottle', price: '15.99', location: 'Bar' },
-    { id: 3, name: 'Gin Bombay', unit: 'bottle', price: '24.99', location: 'Bar' },
-    { id: 4, name: 'Beer', unit: 'can', price: '3.99', location: 'Bar' }
-  ],
-  inventory: [
-    { id: 1, product: 'Vodka Grey Goose', quantity: 5, location: 'Bar' },
-    { id: 2, product: 'Wine Cabernet', quantity: 10, location: 'Bar' },
-    { id: 3, product: 'Beer', quantity: 24, location: 'Bar' }
-  ],
-  invoices: [
-    { 
-      id: 'inv-123', 
-      date: '2023-01-15', 
-      supplier: 'Test Supplier',
-      items: [{ name: 'Vodka Grey Goose', quantity: 5, price: '14,995' }]
-    }
-  ]
+// Default imports that can be overridden in tests
+let dependencies = {
+  logger: require('./logger'),
+  googleSheetsService: require('../modules/google-sheets-service')
+};
+
+// Mock database for testing without external dependencies
+let mockDb = {
+  products: [],
+  inventory: [],
+  invoices: []
 };
 
 /**
- * Find a product by name with fuzzy matching
+ * Override dependencies for testing
+ * @param {Object} deps - Object containing dependencies to override
+ */
+const __setDependencies = (deps = {}) => {
+  dependencies = { ...dependencies, ...deps };
+};
+
+/**
+ * Initialize the database connection
+ * @param {Object} options - Connection options
+ * @returns {Promise<boolean>} - Success or failure
+ */
+const initialize = async (options = {}) => {
+  dependencies.logger.info('Initializing database connection');
+  
+  try {
+    await dependencies.googleSheetsService.initialize(options);
+    return true;
+  } catch (error) {
+    dependencies.logger.error(`Error initializing database: ${error.message}`);
+    return false;
+  }
+};
+
+/**
+ * Find a product by name
  * @param {string} name - Product name to search for
  * @returns {Promise<Object|null>} - Found product or null
  */
-async function findProductByName(name) {
+const findProductByName = async (name) => {
+  dependencies.logger.info(`Finding product by name: ${name}`);
+  if (!name) return null;
+  
   try {
-    logger.info(`Searching for product: ${name}`);
-    
-    if (!name) return null;
-    
-    // Handle specific test cases
-    const testCases = {
-      'wine': { id: 2, name: 'Wine Cabernet', unit: 'bottle', price: '15.99' },
-      'vodka': { id: 1, name: 'Vodka Grey Goose', unit: 'bottle', price: '29.99' },
-      'gin': { id: 3, name: 'Gin Bombay', unit: 'bottle', price: '24.99' },
-      'beer': { id: 4, name: 'Beer', unit: 'can', price: '3.99' }
-    };
-    
-    // Check for exact test matches first
-    const lowercaseName = name.toLowerCase();
-    if (testCases[lowercaseName]) {
-      return { ...testCases[lowercaseName] };
-    }
-    
-    // Then do fuzzy matching
-    for (const product of mockDatabase.products) {
-      if (product.name.toLowerCase().includes(lowercaseName) || 
-          lowercaseName.includes(product.name.toLowerCase())) {
-        return { ...product };
-      }
-    }
-    
-    return null;
+    const nameStr = String(name).toLowerCase();
+    const product = mockDb.products.find(p => 
+      p.name && p.name.toLowerCase() === nameStr || 
+      (p.name && p.name.toLowerCase().includes(nameStr))
+    );
+    return product || null;
   } catch (error) {
-    logger.error(`Error finding product by name: ${error.message}`);
+    dependencies.logger.error(`Error finding product by name: ${error.message}`);
     return null;
   }
-}
+};
 
 /**
- * Get inventory data by location
- * @param {string} location - Location to filter by
- * @returns {Promise<Array>} - Inventory items for the location
+ * Save inventory items
+ * @param {Array|Object} items - Items to save or object with items property
+ * @param {string} sheetName - Optional sheet name
+ * @param {string} period - Optional period in YYYY-MM format
+ * @returns {Promise<Object>} - Result with success status
  */
-async function getInventoryByLocation(location) {
+const saveInventoryItems = async (items, sheetName, period) => {
   try {
-    logger.info(`Getting inventory data for location: ${location}`);
+    // Handle both array and object with items property
+    const itemsArray = Array.isArray(items) ? items : (items.items || []);
+    const location = !Array.isArray(items) ? items.location : undefined;
     
-    if (!location) {
-      return [];
+    // Handle location determination if not explicitly provided
+    let effectiveLocation = location;
+    
+    if (!effectiveLocation && itemsArray.length > 0 && itemsArray[0].location) {
+      effectiveLocation = itemsArray[0].location;
     }
     
-    return mockDatabase.inventory
-      .filter(item => item.location === location)
-      .map(item => ({ ...item }));
-  } catch (error) {
-    logger.error(`Error getting inventory by location: ${error.message}`);
-    return [];
-  }
-}
-
-/**
- * Save inventory items to the database
- * @param {Object|Array} data - Inventory data to save
- * @returns {Promise<Object>} - Success information
- */
-async function saveInventoryItems(data) {
-  try {
-    // Handle different formats of data
-    const items = Array.isArray(data) ? data : (data && data.items ? data.items : []);
-    const location = data && data.location ? data.location : 'unknown';
+    dependencies.logger.info(`Saving ${itemsArray.length} inventory items${sheetName ? ` to sheet: ${sheetName}` : ''}`);
     
-    logger.info(`Saving inventory data for ${location}: ${items.length} items`);
-    
-    if (items.length === 0) {
+    // Validate location is available
+    if (!effectiveLocation) {
       return {
-        success: true,
-        savedCount: 0,
-        message: 'No items to save',
-        timestamp: new Date().toISOString()
+        success: false,
+        message: 'Emplacement non spécifié'
       };
     }
     
+    // Validate period format if provided
+    let effectivePeriod = period;
+    if (period && !/^\d{4}-\d{2}$/.test(period)) {
+      return {
+        success: false,
+        error: 'Invalid period format. Required format: YYYY-MM'
+      };
+    }
+    
+    // Auto-generate period if not provided
+    if (!effectivePeriod) {
+      const now = new Date();
+      effectivePeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    // Enrich items with product data
+    let enrichedItems = [...itemsArray];
+    
+    try {
+      const products = await getProducts(effectiveLocation);
+      
+      enrichedItems = enrichedItems.map(item => {
+        if (item.productId) {
+          const product = products.find(p => p.id === item.productId);
+          if (product) {
+            return {
+              ...item,
+              product_name: product.name,
+              unit: product.unit
+            };
+          }
+        }
+        return item;
+      });
+    } catch (error) {
+      dependencies.logger.warn(`Could not enrich items: ${error.message}`);
+      // Continue with unenriched items instead of failing
+    }
+    
+    // Save to Google Sheets if available
+    try {
+      if (dependencies.googleSheetsService.isConnected && dependencies.googleSheetsService.isConnected()) {
+        await dependencies.googleSheetsService.saveInventoryItems(enrichedItems, effectiveLocation, effectivePeriod);
+      }
+    } catch (error) {
+      dependencies.logger.error(`Error saving inventory items: ${error.message}`);
+      // Continue despite Google Sheets error - we've already logged it
+    }
+    
+    // Return success result
     return {
       success: true,
-      savedCount: items.length,
-      timestamp: new Date().toISOString()
+      savedCount: itemsArray.length,
+      location: effectiveLocation,
+      period: effectivePeriod,
+      items: enrichedItems
     };
   } catch (error) {
-    logger.error(`Error saving inventory items: ${error.message}`);
+    dependencies.logger.error(`Error saving inventory items: ${error.message}`);
     return {
       success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
+      error: error.message
     };
   }
-}
+};
 
 /**
- * Save unknown items for later review
- * @param {Object} data - Data about unrecognized items
- * @returns {Promise<Object>} - Success indicator
- */
-async function saveUnknownItems(data) {
-  try {
-    // Ensure data.items exists with a valid length property
-    const items = data && data.items ? data.items : [];
-    const location = data && data.location ? data.location : 'unknown';
-    
-    logger.info(`Saving unrecognized items for ${location}: ${items.length} items`);
-    
-    return {
-      success: true,
-      savedCount: items.length,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    logger.error(`Error saving unknown items: ${error.message}`);
-    return {
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    };
-  }
-}
-
-/**
- * Save invoice data to the database
+ * Save invoice data
  * @param {Object} invoice - Invoice data to save
- * @returns {Promise<Object>} - Saved invoice information
+ * @returns {Promise<Object>} - Result with success status
  */
-async function saveInvoice(invoice) {
+const saveInvoice = async (invoice) => {
   try {
-    logger.info(`Saving invoice data`);
-    
     if (!invoice) {
-      throw new Error('Invoice data is required');
+      dependencies.logger.error('Error saving invoice: Invoice data is required');
+      return {
+        success: false,
+        error: 'Invoice data is required'
+      };
     }
     
-    // Generate a unique ID if not provided
-    const savedInvoice = {
-      ...invoice,
-      id: invoice.id || 'INV-' + Date.now()
-    };
+    const id = invoice.invoiceId || `INV-${Date.now()}`;
+    dependencies.logger.info(`Saving invoice: ${invoice.invoiceId || 'unnamed'}`);
     
     return {
-      id: savedInvoice.id,
       success: true,
-      timestamp: new Date().toISOString()
+      id,
+      ...invoice
     };
   } catch (error) {
-    logger.error(`Error saving invoice: ${error.message}`);
+    dependencies.logger.error(`Error saving invoice: ${error.message}`);
     throw error;
   }
-}
+};
 
 /**
- * Add a new product to the database
- * @param {Object} product - Product data to add
- * @returns {Promise<Object>} - Added product information
+ * Get products, optionally filtered by location
+ * @param {string} location - Optional location filter
+ * @returns {Promise<Array>} - Array of products
  */
-async function addProduct(product) {
+const getProducts = async (location) => {
+  dependencies.logger.info(`Getting products${location ? ` for location: ${location}` : ''}`);
+  
   try {
-    if (!product || !product.name) {
-      throw new Error('Product data with name is required');
+    // Try to get products from Google Sheets
+    let products = [];
+    try {
+      if (dependencies.googleSheetsService.getProducts) {
+        products = await dependencies.googleSheetsService.getProducts();
+        if (products && products.length > 0) {
+          return location 
+            ? products.filter(p => p.location === location)
+            : products;
+        }
+      }
+    } catch (error) {
+      dependencies.logger.warn(`Could not get products from Google Sheets: ${error.message}`);
     }
     
-    logger.info(`Adding new product: ${product.name}`);
-    
-    const newProduct = {
-      ...product,
-      id: product.id || mockDatabase.products.length + 1
-    };
-    
-    return {
-      ...newProduct,
-      success: true,
-      timestamp: new Date().toISOString()
-    };
+    // Fall back to mock data
+    return location 
+      ? mockDb.products.filter(p => p.location === location)
+      : [...mockDb.products];
   } catch (error) {
-    logger.error(`Error adding product: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * Get all products
- * @param {Object} options - Filter options
- * @returns {Promise<Array>} - List of products
- */
-async function getProducts(options = {}) {
-  try {
-    logger.info('Getting all products');
-    
-    let products = [...mockDatabase.products];
-    
-    // Apply location filter if specified
-    if (options.location) {
-      products = products.filter(p => p.location === options.location);
-    }
-    
-    return products.map(p => ({ ...p }));
-  } catch (error) {
-    logger.error(`Error getting products: ${error.message}`);
+    dependencies.logger.error(`Error getting products: ${error.message}`);
     return [];
   }
-}
+};
+
+/**
+ * Get inventory items by location
+ * @param {string} location - Optional location filter
+ * @returns {Promise<Array>} - Array of inventory items
+ */
+const getInventoryByLocation = async (location) => {
+  dependencies.logger.info(`Getting inventory for location: ${location || 'all'}`);
+  
+  try {
+    return location
+      ? mockDb.inventory.filter(i => i.location === location)
+      : [...mockDb.inventory];
+  } catch (error) {
+    dependencies.logger.error(`Error getting inventory: ${error.message}`);
+    return [];
+  }
+};
 
 /**
  * Get invoice by ID
  * @param {string} id - Invoice ID
- * @returns {Promise<Object|null>} - Invoice data or null if not found
+ * @returns {Promise<Object|null>} - Invoice data or null
  */
-async function getInvoiceById(id) {
+const getInvoiceById = async (id) => {
+  dependencies.logger.info(`Getting invoice by ID: ${id}`);
+  
   try {
-    logger.info(`Getting invoice by ID: ${id}`);
-    
-    if (!id) {
-      return null;
-    }
-    
-    const invoice = mockDatabase.invoices.find(inv => inv.id === id);
-    return invoice ? { ...invoice } : null;
+    return mockDb.invoices.find(i => i.id === id) || null;
   } catch (error) {
-    logger.error(`Error getting invoice by ID: ${error.message}`);
+    dependencies.logger.error(`Error getting invoice: ${error.message}`);
     return null;
   }
-}
+};
 
-// Export all functions for testing
+/**
+ * Set mock database for testing
+ * @param {Object} data - Mock database data
+ */
+const __setMockDb = (data) => {
+  mockDb = { ...data };
+};
+
 module.exports = {
+  initialize,
   findProductByName,
   saveInventoryItems,
-  saveUnknownItems,
   saveInvoice,
-  addProduct,
   getProducts,
   getInventoryByLocation,
-  getInvoiceById
+  getInvoiceById,
+  __setMockDb,
+  __setDependencies
 };

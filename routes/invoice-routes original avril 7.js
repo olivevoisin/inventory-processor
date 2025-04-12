@@ -1,0 +1,117 @@
+/**
+ * Invoice processing routes
+ */
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const invoiceService = require('../modules/invoice-service');
+const invoiceProcessor = require('../modules/invoice-processor');
+const { validateRequestBody } = require('../middleware/validation');
+const auth = require('../middleware/auth');
+const logger = require('../utils/logger');
+
+// Configure multer for file uploads
+const upload = multer({
+  dest: 'uploads/',
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max
+  }
+});
+
+/**
+ * Process a single invoice file
+ * POST /api/invoices/process
+ */
+router.post('/process', auth.apiKeyAuth, upload.single('file'), async (req, res) => {
+  try {
+    // Validate required fields
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file provided'
+      });
+    }
+
+    if (!req.body.location) {
+      return res.status(400).json({
+        success: false,
+        error: 'Location is required'
+      });
+    }
+
+    logger.info(`Processing invoice: ${req.file.originalname || 'unknown'}`);
+    
+    const result = await invoiceService.processSingleInvoice(
+      req.file.path,
+      req.body.location
+    );
+
+    return res.json({
+      success: true,
+      result
+    });
+  } catch (error) {
+    logger.error(`Error processing invoice: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to process invoice',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Process a batch of invoices from a directory
+ * POST /api/invoices/process-batch
+ */
+router.post('/process-batch', 
+  auth.apiKeyAuth, 
+  validateRequestBody(['sourceDir', 'processedDir']),
+  async (req, res) => {
+    try {
+      const { sourceDir, processedDir } = req.body;
+      
+      logger.info(`Processing invoice batch from directory: ${sourceDir}`);
+      
+      const result = await invoiceService.processInvoices(sourceDir, processedDir);
+      
+      return res.json({
+        success: true,
+        result
+      });
+    } catch (error) {
+      logger.error(`Error processing invoice batch: ${error.message}`);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to process invoice batch',
+        details: error.message
+      });
+    }
+});
+
+/**
+ * Get invoice processing history
+ * GET /api/invoices/history
+ */
+router.get('/history', auth.apiKeyAuth, async (req, res) => {
+  try {
+    // Implementation for getting invoice history
+    const history = await invoiceProcessor.getProcessingHistory();
+    
+    return res.json({
+      success: true,
+      history
+    });
+  } catch (error) {
+    logger.error(`Error retrieving invoice history: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve invoice history',
+      details: error.message
+    });
+  }
+});
+
+module.exports = router;

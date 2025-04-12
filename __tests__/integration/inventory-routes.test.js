@@ -2,6 +2,9 @@ const request = require('supertest');
 const app = require('../../app');
 const dbUtils = require('../../utils/database-utils');
 
+// Make sure SKIP_AUTH is set to false for these tests
+process.env.SKIP_AUTH = 'false';
+
 // Mock du module d'utilitaires de base de données
 jest.mock('../../utils/database-utils', () => ({
   getProducts: jest.fn().mockResolvedValue([
@@ -36,18 +39,18 @@ describe('Inventory Routes', () => {
       // Arrange
       const apiKey = 'test-api-key';
       
-      // Act & Assert
-      await request(app)
+      // Act
+      const response = await request(app)
         .get('/api/inventory/products')
-        .set('x-api-key', apiKey)
-        .expect(200)
-        .expect((res) => {
-          expect(Array.isArray(res.body)).toBe(true);
-          expect(res.body.length).toBe(3);
-          expect(res.body[0]).toHaveProperty('name');
-          expect(res.body[0]).toHaveProperty('unit');
-          expect(res.body[0]).toHaveProperty('price');
-        });
+        .set('x-api-key', apiKey);
+      
+      // Assert - check response directly instead of using supertest's .expect()
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body.data)).toBe(true); // Response format has data property
+      expect(response.body.data.length).toBe(3);
+      expect(response.body.data[0]).toHaveProperty('name');
+      expect(response.body.data[0]).toHaveProperty('unit');
+      expect(response.body.data[0]).toHaveProperty('price');
       
       // Verify
       expect(dbUtils.getProducts).toHaveBeenCalledTimes(1);
@@ -68,20 +71,20 @@ describe('Inventory Routes', () => {
       const apiKey = 'test-api-key';
       const location = 'boisson_maison';
       
-      // Act & Assert
-      await request(app)
+      // Act
+      const response = await request(app)
         .get('/api/inventory')
         .query({ location })
-        .set('x-api-key', apiKey)
-        .expect(200)
-        .expect((res) => {
-          expect(Array.isArray(res.body)).toBe(true);
-          expect(res.body.length).toBe(2);
-          expect(res.body[0]).toHaveProperty('name');
-          expect(res.body[0]).toHaveProperty('quantity');
-          expect(res.body[0]).toHaveProperty('unit');
-          expect(res.body[0].location).toBe(location);
-        });
+        .set('x-api-key', apiKey);
+      
+      // Assert - check response directly
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body.data)).toBe(true); // Response format has data property
+      expect(response.body.data.length).toBe(2);
+      expect(response.body.data[0]).toHaveProperty('name');
+      expect(response.body.data[0]).toHaveProperty('quantity');
+      expect(response.body.data[0]).toHaveProperty('unit');
+      expect(response.body.data[0].location).toBe(location);
       
       // Verify
       expect(dbUtils.getInventoryByLocation).toHaveBeenCalledWith(location);

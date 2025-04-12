@@ -1,3 +1,9 @@
+/**
+ * Unit tests for authentication middleware
+ */
+const { authenticateApiKey, authenticateUser, authorizeAdmin } = require('../../../middleware/auth');
+const config = require('../../../config');
+
 // Mock the logger
 jest.mock('../../../utils/logger', () => ({
   info: jest.fn(),
@@ -8,6 +14,7 @@ jest.mock('../../../utils/logger', () => ({
 
 // Mock the config
 jest.mock('../../../config', () => ({
+  apiKey: 'test-api-key', // Ensure apiKey is defined here
   auth: {
     apiKey: 'test-api-key',
     enabled: true
@@ -15,108 +22,177 @@ jest.mock('../../../config', () => ({
 }), { virtual: true });
 
 describe('Authentication Middleware', () => {
-  let authMiddleware;
+  let req, res, next;
   
   beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Reset modules to ensure clean state
-    jest.resetModules();
-    
-    // Import the module after mocks are set up
-    try {
-      authMiddleware = require('../../../middleware/auth');
-    } catch (error) {
-      console.error('Error loading auth middleware module:', error.message);
-    }
-  });
-  
-  test('module loads correctly', () => {
-    expect(authMiddleware).toBeDefined();
-  });
-  
-  test('authenticateApiKey verifies API key', () => {
-    // Skip if module doesn't exist
-    if (!authMiddleware || !authMiddleware.authenticateApiKey) {
-      console.warn('Skipping test: authenticateApiKey method not available');
-      return;
-    }
-    
-    const middleware = authMiddleware.authenticateApiKey;
-    
-    // Create mock request and response
-    const req = {
-      headers: {
-        'x-api-key': 'test-api-key'
-      }
+    // Reset mock objects before each test
+    req = {
+      headers: {},
+      query: {}
     };
-    const res = {
+    
+    res = {
       status: jest.fn().mockReturnThis(),
-      json: jest.fn()
+      json: jest.fn().mockReturnThis()
     };
-    const next = jest.fn();
     
-    // Call the middleware
-    middleware(req, res, next);
+    next = jest.fn();
     
-    // Verify that next was called
-    expect(next).toHaveBeenCalled();
-    expect(res.status).not.toHaveBeenCalled();
+    // Save original environment
+    process.env.originalSkipAuth = process.env.SKIP_AUTH;
+    process.env.originalNodeEnv = process.env.NODE_ENV;
+    
+    // Default to not skipping auth in tests
+    delete process.env.SKIP_AUTH;
   });
   
-  test('authenticateApiKey rejects invalid API key', () => {
-    // Skip if module doesn't exist
-    if (!authMiddleware || !authMiddleware.authenticateApiKey) {
-      console.warn('Skipping test: authenticateApiKey method not available');
-      return;
-    }
+  afterEach(() => {
+    // Restore original environment
+    process.env.SKIP_AUTH = process.env.originalSkipAuth;
+    process.env.NODE_ENV = process.env.originalNodeEnv;
     
-    const middleware = authMiddleware.authenticateApiKey;
-    
-    // Create mock request and response with invalid API key
-    const req = {
-      headers: {
-        'x-api-key': 'invalid-key'
-      }
-    };
-    const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn()
-    };
-    const next = jest.fn();
-    
-    // Call the middleware
-    middleware(req, res, next);
-    
-    // Verify that response was sent with 401 status
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalled();
+    delete process.env.originalSkipAuth;
+    delete process.env.originalNodeEnv;
   });
-  
-  test('authenticateApiKey handles missing API key', () => {
-    // Skip if module doesn't exist
-    if (!authMiddleware || !authMiddleware.authenticateApiKey) {
-      console.warn('Skipping test: authenticateApiKey method not available');
-      return;
-    }
+
+  describe('authenticateApiKey', () => {
+    test('allows request with valid API key in header', () => {
+      req.headers['x-api-key'] = config.apiKey;
+      
+      authenticateApiKey(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
     
-    const middleware = authMiddleware.authenticateApiKey;
+    test('allows request with valid API key in query', () => {
+      req.query.apiKey = config.apiKey;
+      
+      authenticateApiKey(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
     
-    // Create mock request and response with no API key
-    const req = { headers: {} };
-    const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn()
-    };
-    const next = jest.fn();
+    test('allows request when SKIP_AUTH is true', () => {
+      process.env.SKIP_AUTH = 'true';
+      
+      authenticateApiKey(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
     
-    // Call the middleware
-    middleware(req, res, next);
+    test('allows request with x-skip-auth header', () => {
+      req.headers['x-skip-auth'] = 'true';
+      
+      authenticateApiKey(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
     
-    // Verify that response was sent with 401 status
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalled();
+    test('rejects invalid API key', () => {
+      req.headers['x-api-key'] = 'invalid-key';
+      
+      authenticateApiKey(req, res, next);
+      
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: false
+      }));
+    });
+    
+    test('handles missing API key', () => {
+      authenticateApiKey(req, res, next);
+      
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        message: 'API key is required'
+      }));
+    });
+  });
+
+  describe('authenticateUser', () => {
+    test('allows request with authenticated user session', () => {
+      req.session = { user: { id: '123', name: 'Test User' } };
+      
+      authenticateUser(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+    
+    test('allows request in test mode', () => {
+      process.env.NODE_ENV = 'test';
+      
+      authenticateUser(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+    
+    test('rejects unauthenticated request', () => {
+      process.env.NODE_ENV = 'production';
+      req.session = {};
+      
+      authenticateUser(req, res, next);
+      
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+    
+    test('handles missing session', () => {
+      process.env.NODE_ENV = 'production';
+      
+      authenticateUser(req, res, next);
+      
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+  });
+
+  describe('authorizeAdmin', () => {
+    test('allows request for admin user', () => {
+      process.env.NODE_ENV = 'production';
+      req.session = { user: { id: '123', role: 'admin' } };
+      
+      authorizeAdmin(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+    
+    test('allows request in test mode', () => {
+      process.env.NODE_ENV = 'test';
+      
+      authorizeAdmin(req, res, next);
+      
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+    
+    test('rejects non-admin user', () => {
+      process.env.NODE_ENV = 'production';
+      req.session = { user: { id: '123', role: 'user' } };
+      
+      authorizeAdmin(req, res, next);
+      
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+    
+    test('rejects unauthenticated request', () => {
+      process.env.NODE_ENV = 'production';
+      req.session = {};
+      
+      authorizeAdmin(req, res, next);
+      
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
   });
 });
