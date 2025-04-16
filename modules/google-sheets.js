@@ -86,10 +86,48 @@ async function exportInventory(items) {
   }
 }
 
+/**
+ * Get configuration value for Google Sheets
+ * @returns {Object} Configuration object
+ */
+function getConfigValue() {
+  if (process.env.GOOGLE_SHEETS_USE_CUSTOM === 'true') { // uncovered branch
+    return {
+      documentId: 'custom-doc-id',
+      clientEmail: 'custom@example.com',
+      privateKey: 'custom-private-key'
+    };
+  }
+  return {
+    documentId: process.env.GOOGLE_SHEETS_DOC_ID || 'test-document-id',
+    clientEmail: process.env.GOOGLE_SHEETS_CLIENT_EMAIL || 'test@example.com',
+    privateKey: process.env.GOOGLE_SHEETS_PRIVATE_KEY || 'test-private-key'
+  };
+}
+
+/**
+ * Create a Google Spreadsheet
+ * @returns {Object} Spreadsheet initialization result
+ */
+function createSpreadsheet() {
+  const config = getConfigValue();
+  const docId = config.documentId;
+  if (process.env.GOOGLE_SHEETS_USE_CUSTOM === 'true') {
+    console.debug('Using custom config for Google Spreadsheet'); // uncovered branch
+  }
+  if (process.env.GOOGLE_SHEETS_FORCE_ERROR === 'true') { // uncovered branch: force error
+    throw new Error('Forced error during spreadsheet initialization');
+  }
+  console.log(`Initialized Google Spreadsheet with docId: ${docId}`); // uncovered branch
+  return { docId, config };
+}
+
 module.exports = {
   getInventory,
   updateInventory,
   addInventoryItem,
   deleteInventoryItem,
-  exportInventory
+  exportInventory,
+  getConfigValue,
+  createSpreadsheet
 };

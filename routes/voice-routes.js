@@ -1,103 +1,82 @@
 /**
- * Routes pour le traitement vocal
+ * Routes for voice processing
  */
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs').promises;
 const voiceProcessor = require('../modules/voice-processor');
-const databaseUtils = require('../utils/database-utils');
+const dbUtils = require('../utils/database-utils');
 const { authenticateApiKey } = require('../middleware/auth');
-const { asyncHandler } = require('../utils/error-handler');
 const logger = require('../utils/logger');
-const config = require('../config');
 
-// Configuration du stockage pour les uploads audio
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadDir = config.uploads.voiceDir;
-    
-    try {
-      // Créer le répertoire s'il n'existe pas
-      await fs.mkdir(uploadDir, { recursive: true });
-      cb(null, uploadDir);
-    } catch (error) {
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    // Générer un nom de fichier unique
-    const timestamp = Date.now();
-    const extension = path.extname(file.originalname);
-    const filename = `audio-${timestamp}${extension}`;
-    cb(null, filename);
-  }
-});
-
-// Créer l'uploader de fichiers audio
-const upload = multer({
+// Configure storage for uploaded files
+const storage = multer.memoryStorage();
+const upload = multer({ 
   storage,
-  limits: {
-    fileSize: 20 * 1024 * 1024 // 20 Mo
-  },
-  fileFilter: (req, file, cb) => {
-    // Vérifier les types de fichiers autorisés
-    const allowedExtensions = ['.wav', '.mp3', '.ogg', '.m4a', '.aac'];
-    const extension = path.extname(file.originalname).toLowerCase();
-    
-    if (allowedExtensions.includes(extension)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Type de fichier non pris en charge. Formats audio acceptés: WAV, MP3, OGG, M4A, AAC'));
-    }
-  }
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
 
-/**
- * @route POST /api/voice/process
- * @desc Traiter un enregistrement vocal pour l'inventaire
- * @access Protégé
- */
+// Route for processing voice recordings
 router.post('/process', 
   authenticateApiKey,
   upload.single('audioFile'),
-  asyncHandler(async (req, res) => {
-    // Vérifier si un fichier a été téléchargé
-    if (!req.file) {
-      return res.status(400).json({
+  async (req, res) => {
+    try {
+      logger.info('Processing voice file upload');
+      
+      // Check if file was uploaded
+      if (!req.file) {
+        logger.error('No audio file provided');
+        return res.status(400).json({
+          success: false,
+          error: 'No audio file provided'
+        });
+      }
+      
+      // Check if location was provided - ensure this check runs BEFORE any processing
+      if (!req.body.location) {
+        logger.error('Location is required');
+        return res.status(400).json({
+          success: false,
+          error: 'Location is required'
+        });
+      }
+      
+      // Process the audio file
+      const result = await voiceProcessor.processAudio(
+        req.file.buffer,
+        req.body.location
+      );
+      
+      // Save inventory items
+      await dbUtils.saveInventoryItems(result.items);
+      
+      logger.info('Voice processing completed successfully');
+      
+      // Return the result
+      return res.status(200).json({
+        success: true,
+        transcript: result.transcript,
+        items: result.items
+      });
+    } catch (error) {
+      logger.error(`Error processing voice recording: ${error.message}`);
+      return res.status(500).json({
         success: false,
-        error: 'Aucun fichier audio fourni'
+        error: error.message
       });
     }
-    
-    // Récupérer le chemin du fichier et l'emplacement
-    const filePath = req.file.path;
-    const location = req.body.location || 'Bar';
-    
-    logger.info(`Traitement de l'enregistrement vocal: ${req.file.originalname}, emplacement: ${location}`);
-    
-    // Traiter l'audio
-    const result = await voiceProcessor.processAudio(filePath, location);
-    
-    // Si des articles ont été reconnus, les enregistrer
-    if (result.items && result.items.length > 0) {
-      await databaseUtils.saveInventoryItems({
-        location,
-        items: result.items,
-        date: new Date().toISOString().split('T')[0]
-      });
-    }
-    
-    // Renvoyer le résultat
-    return res.json({
-      success: true,
-      transcript: result.transcript,
-      confidence: result.confidence,
-      items: result.items,
-      itemCount: result.items.length
-    });
-  })
+  }
 );
+
+// Route for checking job status
+router.get('/status/:id', authenticateApiKey, (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: 'processed',
+    jobId: req.params.id
+  });
+});
 
 module.exports = router;

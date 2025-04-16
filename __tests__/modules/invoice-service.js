@@ -1,10 +1,10 @@
 // modules/invoice-service.js
 const fs = require('fs').promises;
 const path = require('path');
-const invoiceProcessor = require('./invoice-processor');
-const translationService = require('./translation-service');
-const dbUtils = require('../utils/database-utils');
-const logger = require('../utils/logger');
+const invoiceProcessor = require('../../modules/invoice-processor');
+const translationService = require('../../modules/translation-service');
+const dbUtils = require('../../utils/database-utils');
+const logger = require('../../utils/logger');
 
 /**
  * Process all invoices in a directory

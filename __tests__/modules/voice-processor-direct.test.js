@@ -1,13 +1,8 @@
-// Direct test for voice processor to measure coverage
+/**
+ * Direct tests for voice-processor module
+ * Without using Jest mocks
+ */
 const voiceProcessor = require('../../modules/voice-processor');
-
-// Mock any external dependencies
-jest.mock('../../utils/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn()
-}));
 
 describe('Voice Processor Direct Test', () => {
   test('should expose the expected methods', () => {
@@ -16,7 +11,6 @@ describe('Voice Processor Direct Test', () => {
     expect(typeof voiceProcessor.extractInventoryData).toBe('function');
   });
   
-  // Test for extractInventoryData which should be simpler to test
   test('extractInventoryData should parse inventory commands', () => {
     const transcript = "Add 5 units of SKU-123 to shelf A";
     const result = voiceProcessor.extractInventoryData(transcript);

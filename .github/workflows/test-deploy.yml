@@ -1,0 +1,47 @@
+name: Test Deployment
+
+on:
+  workflow_dispatch: # Allows manual triggering
+  pull_request:
+    branches: [ main ] # Trigger on PRs to main
+
+jobs:
+  test_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Use the appropriate Node.js version
+
+      - name: Install dependencies
+        run: npm ci # Use 'ci' for faster, reliable installs in CI
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application (if needed)
+        run: npm run build # Or your build command
+
+      - name: Simulate deployment step (e.g., check PM2 status)
+        run: |
+          echo "Simulating deployment check..."
+          # Add commands here to test parts of your deployment process
+          # For example, check if pm2 is installed or list processes
+          # pm2 list
+          echo "Deployment test simulation complete."
+
+      # Optional: Add a notification step similar to deploy.yml
+      - name: Send test deployment notification (Optional)
+        if: success() # Only run if previous steps succeed
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }} # Use secrets for webhook
+          SLACK_CHANNEL: test-deployments # Use a different channel for testing
+          SLACK_TITLE: Test Deployment Successful
+          SLACK_MESSAGE: 'Test deployment workflow completed successfully.'
+          SLACK_COLOR: good

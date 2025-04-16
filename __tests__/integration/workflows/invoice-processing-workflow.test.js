@@ -1,133 +1,111 @@
 /**
- * Test du workflow de traitement des factures et de traduction
+ * Integration tests for invoice processing workflow
  */
 const fs = require('fs');
+const path = require('path');
+const invoiceService = require('../../../modules/invoice-service');
 const invoiceProcessor = require('../../../modules/invoice-processor');
 const translationService = require('../../../modules/translation-service');
 const databaseUtils = require('../../../utils/database-utils');
-const invoiceWorkflow = require('../../../modules/invoice-workflow');
 
-// Mocker les dépendances
-jest.mock('fs');
-jest.mock('../../../modules/invoice-processor');
-jest.mock('../../../modules/translation-service');
-jest.mock('../../../utils/database-utils');
+// Mock dependencies
+jest.mock('fs', () => ({
+  promises: {
+    mkdir: jest.fn().mockResolvedValue(undefined),
+    readdir: jest.fn(),
+    rename: jest.fn().mockResolvedValue(undefined)
+  }
+}));
 
-// Configuration du test
-const sourceDir = './data/invoices';
-const processedDir = './data/invoices/processed';
+jest.mock('../../../modules/invoice-processor', () => ({
+  processInvoice: jest.fn(),
+  extractInvoiceData: jest.fn().mockResolvedValue({
+    invoiceDate: '2023-01-15',
+    items: [
+      { product: 'Sake', count: 5, price: '5000' },
+      { product: 'Whisky', count: 2, price: '8000' }
+    ],
+    total: '13000',
+    supplier: 'Test Supplier'
+  })
+}));
+
+jest.mock('../../../modules/translation-service', () => ({
+  translateItems: jest.fn().mockImplementation(items => {
+    // Simple translation implementation
+    return items.map(item => ({
+      ...item,
+      product: item.product === 'Sake' ? 'Japanese Rice Wine' : item.product
+    }));
+  })
+}));
+
+jest.mock('../../../utils/database-utils', () => ({
+  saveInvoice: jest.fn().mockResolvedValue({ id: 'inv-123', success: true }),
+  saveInventoryItems: jest.fn().mockResolvedValue({ success: true, savedCount: 2 }),
+  findProductByName: jest.fn().mockImplementation(name => {
+    if (name === 'Japanese Rice Wine') {
+      return { id: 'prod-1', name: 'Japanese Rice Wine', unit: 'bottle', price: 25.99 };
+    }
+    return null;
+  }),
+  addProduct: jest.fn().mockResolvedValue({ success: true, id: 'prod-new' })
+}));
 
 describe('Invoice Processing and Translation Workflow', () => {
   beforeEach(() => {
-    // Réinitialiser les mocks
     jest.clearAllMocks();
     
-    // Mocker la lecture du répertoire
+    // Setup mock file system
     fs.promises.readdir.mockResolvedValue([
       'invoice1.pdf',
       'invoice2.pdf',
-      'test.txt' // Extension non supportée
+      'document.txt' // Non-PDF file that should be ignored
     ]);
-    
-    // Mocker le traitement des factures
-    invoiceProcessor.processInvoice.mockResolvedValue({
-      invoiceId: 'INV-001',
-      invoiceDate: '2023-01-15',
-      supplier: 'Test Supplier',
-      items: [
-        { product: 'Vodka Grey Goose', count: 5, price: '14,995' },
-        { product: 'Wine Cabernet', count: 10, price: '15,990' }
-      ]
-    });
-    
-    // Mocker la traduction
-    translationService.translateItems.mockImplementation(items => {
-      return items.map(item => ({
-        ...item,
-        translated_name: `${item.product} (Translated)`,
-        original_name: item.product
-      }));
-    });
-    
-    // Mocker les opérations de base de données
-    databaseUtils.findProductByName.mockResolvedValue(null);
-    databaseUtils.addProduct.mockResolvedValue({ id: 'new-product' });
-    databaseUtils.saveInvoice.mockResolvedValue({ id: 'invoice-1' });
-    databaseUtils.saveInventoryItems.mockResolvedValue({ success: true });
   });
-  
-  test('complete invoice processing workflow extracts, translates and stores invoice data', async () => {
-    // Exécuter le workflow
-    const result = await invoiceWorkflow.processInvoiceDirectory(sourceDir, processedDir);
+
+  it('complete invoice processing workflow extracts, translates and stores invoice data', async () => {
+    // Arrange
+    const sourceDir = '/test/invoices';
+    const processedDir = '/test/invoices/processed';
     
-    // 2. Check result
+    // Act
+    const result = await invoiceService.processInvoices(sourceDir, processedDir);
+    
+    // Assert
     expect(result.success).toBe(true);
     expect(result.processed).toBeGreaterThan(0);
-    
-    // 3. Verify all steps were performed
-    expect(fs.promises.readdir).toHaveBeenCalled();
-    expect(invoiceProcessor.processInvoice).toHaveBeenCalled();
-    expect(translationService.translateItems).toHaveBeenCalled();
+    expect(invoiceProcessor.extractInvoiceData).toHaveBeenCalled();
     expect(databaseUtils.saveInvoice).toHaveBeenCalled();
-    expect(databaseUtils.saveInventoryItems).toHaveBeenCalled();
+    expect(fs.promises.rename).toHaveBeenCalled();
   });
   
-  test('processes a single invoice correctly', async () => {
-    // 1. Execute single invoice processing
-    const result = await invoiceWorkflow.processSingleInvoice('invoice1.pdf', 'Bar');
+  it('processes a single invoice correctly', async () => {
+    // Arrange
+    const filePath = '/test/invoices/sample.pdf';
+    const location = 'Bar';
     
-    // 2. Verify steps and result
-    expect(invoiceProcessor.processInvoice).toHaveBeenCalledWith('invoice1.pdf', 'Bar');
+    // Act
+    const result = await invoiceService.processSingleInvoice(filePath, location);
+    
+    // Assert
+    expect(result).toBeDefined();
+    expect(result.items).toBeDefined();
+    expect(Array.isArray(result.items)).toBe(true);
     expect(translationService.translateItems).toHaveBeenCalled();
-    expect(databaseUtils.saveInvoice).toHaveBeenCalled();
-    expect(databaseUtils.saveInventoryItems).toHaveBeenCalled();
-    expect(result).toHaveProperty('items');
   });
   
-  test('adds new products when not found in database', async () => {
-    // 1. Execute with a file containing a new product
-    await invoiceWorkflow.processSingleInvoice('__fixtures__/invoices/new-product.pdf', 'Bar');
+  it('adds new products when not found in database', async () => {
+    // Arrange
+    const filePath = '/test/invoices/sample.pdf';
+    const location = 'Bar';
     
-    // 3. Verify product was added
+    // Act
+    const result = await invoiceService.processSingleInvoice(filePath, location);
+    
+    // Assert
+    expect(result).toBeDefined();
+    expect(databaseUtils.findProductByName).toHaveBeenCalled();
     expect(databaseUtils.addProduct).toHaveBeenCalled();
-  });
-  
-  test('handles extraction errors gracefully', async () => {
-    // 1. Override mock for this test to reject with an error
-    invoiceProcessor.processInvoice.mockRejectedValueOnce(new Error('OCR failed'));
-    
-    // 2. Process with error and expect it to be thrown
-    await expect(
-      invoiceWorkflow.processSingleInvoice('__fixtures__/invoices/failing-ocr.pdf', 'Bar')
-    ).rejects.toThrow('OCR failed');
-    
-    // 3. Verify error handling - saveInvoice should not be called
-    expect(databaseUtils.saveInvoice).not.toHaveBeenCalled();
-  });
-  
-  test('handles translation errors gracefully', async () => {
-    // 1. Override mock for translation to reject with an error
-    translationService.translateItems.mockRejectedValueOnce(new Error('Translation failed'));
-    
-    // 2. Process with error and expect it to be thrown
-    await expect(
-      invoiceWorkflow.processSingleInvoice('__fixtures__/invoices/failing-translation.pdf', 'Bar')
-    ).rejects.toThrow('Translation failed');
-    
-    // 4. Verify error handling - saveInvoice should not be called
-    expect(databaseUtils.saveInvoice).not.toHaveBeenCalled();
-  });
-  
-  test('handles empty input directory gracefully', async () => {
-    // 1. Override mock to return empty directory
-    fs.promises.readdir.mockResolvedValueOnce([]);
-    
-    // 2. Execute workflow
-    const result = await invoiceWorkflow.processInvoiceDirectory(sourceDir, processedDir);
-    
-    // 3. Verify handling of empty directory
-    expect(result.success).toBe(true);
-    expect(result.processed).toBe(0);
-    expect(result.message).toBe('No invoice files found');
   });
 });

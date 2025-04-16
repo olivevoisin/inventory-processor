@@ -1,0 +1,27 @@
+# ... existing workflow configuration ...
+
+jobs:
+  deploy:
+    # ... existing deploy job configuration ...
+    steps:
+      # ... existing steps ...
+      - name: Build and Reload App
+        run: |
+          npm run build
+          pm2 reload inventory-processor
+
+  # Correct the indentation here: 'notify' should be at the same level as 'deploy'
+  notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send deployment notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: deployments
+          SLACK_TITLE: Inventory Processor Deployment
+          SLACK_MESSAGE: 'Successfully deployed to staging'
+          SLACK_COLOR: good
+
+# ... rest of workflow configuration ...
