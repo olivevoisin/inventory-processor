@@ -16,7 +16,7 @@ module.exports = {
   },
   setupFiles: ['<rootDir>/jest.setup.js'],
   setupFilesAfterEnv: ['./__tests__/setup.js'],
-  testTimeout: 30000,
+  testTimeout: 10000,  // 10 seconds timeout
   testPathIgnorePatterns: ['/node_modules/', '/.history/'],
   transform: {
     '^.+\\.jsx?$': 'babel-jest'

@@ -7,7 +7,7 @@ const helmet = require('helmet');
 const path = require('path');
 const morgan = require('morgan');
 const logger = require('./utils/logger');
-const { errorMiddleware } = require('./utils/error-handler'); 
+const { handleError } = require('./utils/error-handler'); 
 const { trackApiCall, standardizeResponse } = require('./middleware/common');
 const globalErrorHandler = require('./middleware/globalErrorHandler');
 
@@ -78,7 +78,7 @@ app.use((req, res, next) => {
 });
 
 // Error handler
-app.use(errorMiddleware);
+app.use(handleError);
 app.use(globalErrorHandler); // Apply global error handler
 
 module.exports = app;

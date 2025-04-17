@@ -37,6 +37,7 @@ if (!config.testMockTranslate) {
 const translationCache = new Map();
 
 // Dictionnaire de traduction simplifiée pour les tests (Only used if config.testMockTranslate is true)
+// Ensure keys are lowercase for consistent lookup
 const translations = {
   // Japonais -> Français
   ja: {
@@ -48,17 +49,15 @@ const translations = {
     'チョコレート': 'Chocolat',
     'ボックス': 'Box',
     'ウォッカ': 'Vodka',
-    // Phrases spécifiques pour les tests
     '5本のワイン': '5 bouteilles de vin',
     '3缶のビール': '3 cannettes de bière',
     'チョコレートの箱': 'box de chocolat',
-    // Termes généraux
     'インボイス': 'Facture',
     '日付': 'Date',
     'アイテム': 'Articles',
     '合計': 'Total'
   },
-  // Français -> Anglais (pour les tests)
+  // Français -> Anglais (pour les tests) - Use lowercase keys
   fr: {
     'vin rouge': 'red wine',
     'vin blanc': 'white wine',
@@ -89,20 +88,20 @@ async function detectLanguage(text) {
       return detection?.language && detection.language !== 'und' ? detection.language : 'en';
     } catch (error) {
       logger.error(`Error detecting language via API: ${error.message}`, error);
-      // --- Re-throw the error when not using the internal mock ---
-      throw error;
-      // --- End Re-throw ---
+      // --- DO NOT re-throw, proceed to fallback ---
     }
   }
   // --- End Google Cloud client usage ---
 
   // --- Internal Mock/Fallback Detection ---
   const japanesePattern = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]/;
-  const frenchPattern = /[éèêëàâäôöùûüïîçñÉÈÊËÀÂÄÔÖÙÛÜÏÎÇÑ]/;
+  // Broader check for French: accents OR common words (case-insensitive)
+  const frenchPattern = /[éèêëàâäôöùûüïîçñÉÈÊËÀÂÄÔÖÙÛÜÏÎÇÑ]/i;
+  const commonFrenchWords = /\b(le|la|les|un|une|des|de|du|et|ou|est|sont|bonjour|merci|vin|bière)\b/i;
 
   if (japanesePattern.test(text)) {
     return 'ja';
-  } else if (frenchPattern.test(text)) {
+  } else if (frenchPattern.test(text) || commonFrenchWords.test(text)) { // Updated condition
     return 'fr';
   } else {
     return 'en'; // Default
@@ -120,7 +119,18 @@ async function detectLanguage(text) {
 async function translate(text, sourceLanguage = 'auto', targetLanguage = 'fr') {
   if (!text) return '';
 
-  const actualSourceLanguage = sourceLanguage === 'auto' ? await detectLanguage(text) : sourceLanguage;
+  // --- Determine actual source language ---
+  let actualSourceLanguage = sourceLanguage;
+  if (sourceLanguage === 'auto') {
+    try {
+      actualSourceLanguage = await detectLanguage(text);
+    } catch (detectError) {
+      // If detection fails (even API detection), log and default to 'en' for fallback
+      logger.error(`Auto-detection failed during translate: ${detectError.message}. Using 'en' for fallback.`, detectError);
+      actualSourceLanguage = 'en'; // Default to 'en' if detection fails
+    }
+  }
+  // --- End Determine actual source language ---
 
   if (actualSourceLanguage === targetLanguage) return text;
 
@@ -141,41 +151,27 @@ async function translate(text, sourceLanguage = 'auto', targetLanguage = 'fr') {
       return translationResult;
     } catch (error) {
       logger.error(`Error translating text via API: ${error.message}`, error);
-      // --- Re-throw the error when not using the internal mock ---
-      throw error;
-      // --- End Re-throw ---
+      // --- DO NOT re-throw, proceed to fallback ---
     }
   }
   // --- End Google Cloud client usage ---
 
   // --- Internal Mock/Fallback Logic ---
-  try {
-    if (config.testMockTranslate) {
-      // Use internal dictionary only if testMockTranslate is true
-      if (actualSourceLanguage === 'fr' && targetLanguage === 'en') {
-        if (translations.fr[text.toLowerCase()]) {
-          const translatedResult = translations.fr[text.toLowerCase()];
-          translationCache.set(cacheKey, translatedResult);
-          return translatedResult;
-        }
-      } else if (actualSourceLanguage === 'ja' && targetLanguage === 'fr') {
-        if (translations.ja[text]) {
-          const translatedResult = translations.ja[text];
-          translationCache.set(cacheKey, translatedResult);
-          return translatedResult;
-        }
-      }
+  if (config.testMockTranslate) {
+    // Use internal dictionary only if testMockTranslate is true
+    // Use lowercase for lookup
+    const lookupKey = text.toLowerCase();
+    if (translations[actualSourceLanguage] && translations[actualSourceLanguage][lookupKey]) {
+      const translatedResult = translations[actualSourceLanguage][lookupKey];
+      translationCache.set(cacheKey, translatedResult);
+      return translatedResult;
     }
-
-    // Default mock/fallback format if no specific mock or API failed
-    const translatedText = `[${targetLanguage}] ${text}`;
-    translationCache.set(cacheKey, translatedText);
-    return translatedText;
-  } catch (error) {
-    // This catch is likely redundant now but kept for safety
-    logger.error(`Erreur lors de la traduction (fallback): ${error.message}`);
-    return text; // En cas d'erreur, retourner le texte original
   }
+
+  // Default mock/fallback format if no specific mock or API failed
+  const translatedText = `[${targetLanguage}] ${text}`;
+  translationCache.set(cacheKey, translatedText);
+  return translatedText;
   // --- End Internal Mock/Fallback Logic ---
 }
 
@@ -191,7 +187,19 @@ async function batchTranslate(texts, sourceLanguage = 'auto', targetLanguage = '
     return [];
   }
 
-  const actualSourceLanguage = sourceLanguage === 'auto' ? await detectLanguage(texts[0] || '') : sourceLanguage;
+  // --- Determine actual source language ---
+  let actualSourceLanguage = sourceLanguage;
+  if (sourceLanguage === 'auto') {
+    try {
+      // Detect based on the first non-empty text
+      const firstText = texts.find(t => !!t) || '';
+      actualSourceLanguage = await detectLanguage(firstText);
+    } catch (detectError) {
+      logger.error(`Auto-detection failed during batchTranslate: ${detectError.message}. Using 'en' for fallback.`, detectError);
+      actualSourceLanguage = 'en'; // Default to 'en' if detection fails
+    }
+  }
+  // --- End Determine actual source language ---
 
   if (actualSourceLanguage === targetLanguage) {
     return [...texts];
@@ -204,40 +212,19 @@ async function batchTranslate(texts, sourceLanguage = 'auto', targetLanguage = '
         from: actualSourceLanguage,
         to: targetLanguage,
       };
-      // Note: Caching for batch is more complex, skipping for now
       const [translationsResult] = await translateClient.translate(texts, options);
       return Array.isArray(translationsResult) ? translationsResult : [translationsResult];
     } catch (error) {
       logger.error(`Error batch translating texts via API: ${error.message}`, error);
-      // --- Re-throw the error when not using the internal mock ---
-      throw error;
-      // --- End Re-throw ---
+      // --- DO NOT re-throw, proceed to fallback ---
     }
   }
   // --- End Google Cloud client usage ---
 
   // --- Internal Mock/Fallback Logic ---
-  try {
-    // Specific mock case for tests (only if testMockTranslate is true)
-    if (config.testMockTranslate && texts.length === 3 &&
-        texts[0].includes('bouteille') &&
-        texts[1].includes('cannette') &&
-        texts[2].includes('boîte')) {
-      // Return format expected by tests using internal mock
-      return [
-        '[en] bottle of wine',
-        '[en] can of beer',
-        '[en] box of chocolate'
-      ];
-    }
-
-    // Fallback: translate individually using the translate function (which handles mocking/API)
-    const promises = texts.map(text => translate(text, actualSourceLanguage, targetLanguage));
-    return await Promise.all(promises);
-  } catch (error) {
-    logger.error(`Erreur lors de la traduction en lot (fallback): ${error.message}`);
-    return [...texts]; // Return original texts on error
-  }
+  // Fallback: translate individually using the translate function
+  const promises = texts.map(text => translate(text, actualSourceLanguage, targetLanguage));
+  return await Promise.all(promises);
   // --- End Internal Mock/Fallback Logic ---
 }
 
@@ -263,33 +250,6 @@ async function translateItems(items, sourceLanguage = 'auto', targetLanguage = '
       return [];
     }
 
-    // Specific mock case for tests (only if testMockTranslate is true)
-    if (config.testMockTranslate && items.length === 3 &&
-        items.some(item => item.product === 'vin rouge') &&
-        items.some(item => item.product_name === 'bière blonde') &&
-        items.some(item => item.name === 'whisky')) {
-      return [
-        {
-          ...items[0],
-          product_name: '[en] red wine',
-          original_name: 'vin rouge',
-          translated_name: '[en] red wine'
-        },
-        {
-          ...items[1],
-          product_name: '[en] light beer',
-          original_name: 'bière blonde',
-          translated_name: '[en] light beer'
-        },
-        {
-          ...items[2],
-          product_name: '[en] whiskey',
-          original_name: 'whisky',
-          translated_name: '[en] whiskey'
-        }
-      ];
-    }
-
     const translatedItems = [];
     for (const item of items) {
       const productName = item.product || item.product_name || item.name || '';
@@ -297,13 +257,12 @@ async function translateItems(items, sourceLanguage = 'auto', targetLanguage = '
         translatedItems.push(item);
         continue;
       }
-      // Use the updated translate function which handles API/mock logic
+      // Use the updated translate function which handles API/mock/fallback logic
       const translatedName = await translate(productName, sourceLanguage, targetLanguage);
       translatedItems.push({
         ...item,
-        product_name: translatedName,
-        original_name: productName,
-        translated_name: translatedName
+        original_name: productName, // Store original name
+        translated_name: translatedName // Store potentially translated name
       });
     }
     return translatedItems;

@@ -48,7 +48,7 @@ const standardizeResponse = (req, res, next) => {
     }
     
     // Record API usage metrics
-    monitoring.recordApiUsage(req.method, req.path || req.url, responseTime, res.statusCode);
+    monitoring.recordApiCall(req.path || req.url, res.statusCode, responseTime); // Fix: Changed recordApiUsage to recordApiCall and corrected parameter order
     
     // Call the original end method
     originalEnd.call(this, chunk, encoding);

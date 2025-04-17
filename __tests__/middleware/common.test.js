@@ -7,7 +7,8 @@ const logger = require('../../utils/logger');
 
 // Mock the monitoring and logger modules
 jest.mock('../../utils/monitoring', () => ({
-  recordApiUsage: jest.fn(),
+  recordApiCall: jest.fn(),
+  recordApiUsage: jest.fn(),  // Add this for backward compatibility
   recordError: jest.fn()
 }));
 
