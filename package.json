@@ -53,7 +53,7 @@
     "compression": "^1.8.0",
     "eslint": "^8.57.1",
     "globals": "^16.0.0",
-    "husky": "^8.0.3",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "madge": "^8.0.0",
     "mongodb-memory-server": "^8.16.1",
