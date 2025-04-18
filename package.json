@@ -59,7 +59,7 @@
     "mongodb-memory-server": "^8.16.1",
     "nodemon": "^3.1.9",
     "sinon": "^19.0.4",
-    "supertest": "^6.3.4",
+    "supertest": "^7.1.0",
     "tesseract.js": "^6.0.0",
     "winston": "^3.17.0"
   },
