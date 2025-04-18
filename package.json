@@ -60,7 +60,7 @@
     "nodemon": "^3.1.9",
     "sinon": "^19.0.4",
     "supertest": "^6.3.4",
-    "tesseract.js": "^6.0.0",
+    "tesseract.js": "^6.0.1",
     "winston": "^3.17.0"
   },
   "engines": {
