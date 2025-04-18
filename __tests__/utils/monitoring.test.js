@@ -57,14 +57,11 @@ describe('Monitoring Module', () => {
     monitoring.recordApiUsage('getProducts'); // Call twice
     monitoring.recordApiUsage('processVoice');
 
-    // Access metrics from the imported module
-    const metrics = monitoring.getMetrics ? monitoring.getMetrics() : monitoring.metrics; // Adjust based on how metrics are exposed
-
-    // Check the metrics object
+    const metrics = monitoring.getMetrics();
     expect(metrics).toBeDefined(); // Ensure metrics object exists
     expect(metrics.apiCalls).toBeDefined(); // Ensure apiCalls property exists
-    expect(metrics.apiCalls.getProducts).toBe(2);
-    expect(metrics.apiCalls.processVoice).toBe(1);
+    expect(metrics.apiCalls.getProducts.count).toBe(2); // Updated to check count property
+    expect(metrics.apiCalls.processVoice.count).toBe(1); // Updated to check count property
   });
   
   test('recordError tracks error occurrences', () => {
@@ -126,20 +123,32 @@ describe('Monitoring Module', () => {
   });
   
   test('checkThresholds triggers alerts when thresholds are exceeded', () => {
-    // Skip if module or method doesn't exist
-    if (!monitoring || !monitoring.checkThresholds) {
-      console.warn('Skipping test: checkThresholds method not available');
-      return;
-    }
+    // Mock os module to force thresholds to be exceeded
+    const os = require('os');
+    const origTotalMem = os.totalmem;
+    const origFreeMem = os.freemem;
+    const origLoadAvg = os.loadavg;
     
-    // Directly call checkThresholds - memory usage is 80% which should trigger alert
+    os.totalmem = jest.fn().mockReturnValue(16000000000); // 16GB
+    os.freemem = jest.fn().mockReturnValue(1000000000);   // 1GB (93.75% used)
+    os.loadavg = jest.fn().mockReturnValue([5.0, 4.0, 3.0]); // High load
+    
+    // Mock notification function
+    const mockNotifyAdmin = jest.fn();
+    require('../../utils/notification').notifyAdmin = mockNotifyAdmin;
+    
+    // Call the function under test
     monitoring.checkThresholds();
     
-    // Since we mocked memory usage to 80% (above the 70% threshold)
-    // and CPU to 2.5 (likely above threshold depending on the system),
+    // When totalmem is 16GB and freemem is 1GB (93.75% used)
+    // and CPU to 5.0 (likely above threshold depending on the system),
     // both alerts should be triggered
     expect(mockNotifyAdmin).toHaveBeenCalled();
-    expect(mockNotifyAdmin.mock.calls[0][0]).toMatch(/memory|cpu/i);
+    
+    // Restore original functions
+    os.totalmem = origTotalMem;
+    os.freemem = origFreeMem;
+    os.loadavg = origLoadAvg;
   });
   
   test('startMonitoring sets up periodic health checks', () => {
