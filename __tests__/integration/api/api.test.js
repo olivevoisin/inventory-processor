@@ -1,4 +1,20 @@
+const request = require('supertest');
+const app = require('../../../app');
+
+// Create a server instance we can close later
+let server;
+
 describe('API Integration', () => {
+  beforeAll(() => {
+    // Start server for testing
+    server = app.listen(0);
+  });
+
+  afterAll((done) => {
+    // Properly close the server after tests
+    server.close(done);
+  });
+
   test('placeholder test to avoid empty test suite', () => {
     expect(true).toBe(true);
   });

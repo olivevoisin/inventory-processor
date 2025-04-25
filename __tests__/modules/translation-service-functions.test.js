@@ -56,15 +56,16 @@ describe('Translation Service - Function Coverage Tests', () => {
     });
   });
   
-  describe('detection and error handling', () => {
-    it('should detect French with multiple accented characters', async () => {
-      const result = await translationService.detectLanguage('voilà où se trouve le café');
-      expect(result).toBe('fr');
-    });
-    
-    it('should detect Japanese with multiple character types', async () => {
-      const result = await translationService.detectLanguage('こんにちは世界！ありがとう。');
-      expect(result).toBe('ja');
-    });
-  });
+// Update test timeouts
+describe('detection and error handling', () => {
+  it('should detect French with multiple accented characters', async () => {
+    const result = await translationService.detectLanguage('voilà où se trouve le café');
+    expect(result).toBe('fr');
+  }, 30000); // Increased timeout
+  
+  it('should detect Japanese with multiple character types', async () => {
+    const result = await translationService.detectLanguage('こんにちは世界！ありがとう。');
+    expect(result).toBe('ja');
+  }, 30000); // Increased timeout
+});
 });

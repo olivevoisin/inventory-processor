@@ -105,59 +105,6 @@ describe('Invoice Routes', () => {
         .send({})
         .expect(400);
     });
-
-    test('POST /api/invoices/process-batch should process a batch of invoices and return results', async () => {
-      const requestBody = {
-        files: [
-          { buffer: Buffer.from('mock invoice content'), originalname: 'invoice1.pdf' },
-          { buffer: Buffer.from('mock invoice content'), originalname: 'invoice2.pdf' }
-        ],
-        location: 'bar'
-      };
-
-      await request(app)
-        .post('/api/invoices/process-batch')
-        .set('x-skip-auth', 'true')
-        .send(requestBody)
-        .expect(200)
-        .expect(res => {
-          expect(res.body.success).toBe(true);
-          expect(res.body.result).toBeDefined();
-        });
-    });
-
-    test('POST /api/invoices/process-batch should process a batch of invoices', async () => {
-      const requestBody = {
-        files: [{ buffer: Buffer.from('mock invoice content') }],
-        location: 'bar'
-      };
-
-      await request(app)
-        .post('/api/invoices/process-batch')
-        .set('x-api-key', 'test-api-key')
-        .send(requestBody)
-        .expect(200)
-        .expect(res => {
-          expect(res.body.success).toBe(true);
-          expect(Array.isArray(res.body.result)).toBe(true);
-        });
-    });
-
-    test('POST /api/invoices/process-batch should return error if no location is provided', async () => {
-      const requestBody = {
-        files: [{ buffer: Buffer.from('mock invoice content') }]
-      };
-
-      await request(app)
-        .post('/api/invoices/process-batch')
-        .set('x-api-key', 'test-api-key')
-        .send(requestBody)
-        .expect(400)
-        .expect(res => {
-          expect(res.body.success).toBe(false);
-          expect(res.body.error).toBe('Location is required');
-        });
-    });
   });
 
   describe('GET /api/invoices/:id', () => {

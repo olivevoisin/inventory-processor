@@ -2,6 +2,9 @@ const request = require('supertest');
 const app = require('../../../app');
 const dbUtils = require('../../../utils/database-utils');
 
+// Create a server instance we can close later
+let server;
+
 // Add a console log to see the structure of responses
 jest.spyOn(console, 'log');
 
@@ -19,6 +22,16 @@ jest.mock('../../../utils/database-utils', () => ({
 }));
 
 describe('Inventory API Endpoints', () => {
+  beforeAll(() => {
+    // Start server for testing
+    server = app.listen(0);
+  });
+
+  afterAll((done) => {
+    // Properly close the server after tests
+    server.close(done);
+  });
+  
   afterEach(() => {
     jest.clearAllMocks();
   });
