@@ -1,290 +1,255 @@
-/**
- * Module de service de traduction
- * Gère les traductions entre différentes langues pour l'inventaire
- */
 const logger = require('../utils/logger');
-const config = require('../config'); // Import config
-let Translate; // Variable to hold the Translate class
+const config = require('../config');
 
-// --- Start: Conditional Google Cloud Client Initialization ---
-let translateClient = null;
-if (!config.testMockTranslate) {
+let googleTranslateClient;
+let cache = {};
+
+// Initialize client eagerly on module load
+getGoogleTranslateClient();
+
+function getGoogleTranslateClient() {
+  if (googleTranslateClient !== undefined) {
+    return googleTranslateClient;
+  }
   try {
-    // Only require the real library if not using the internal mock
-    ({ Translate } = require('@google-cloud/translate').v2);
-    if (config.googleCloud?.projectId && config.googleCloud?.keyFilename) {
-      translateClient = new Translate({
-        projectId: config.googleCloud.projectId,
-        keyFilename: config.googleCloud.keyFilename,
-      });
-      logger.info('Google Translate client initialized.');
-    } else {
-      // Attempt to initialize without explicit credentials (useful for GCE/Cloud Run)
-      translateClient = new Translate();
-      logger.info('Google Translate client initialized using default credentials.');
-    }
+    const { v2 } = require('@google-cloud/translate');
+    googleTranslateClient = new v2.Translate({
+      projectId: config.googleCloud.projectId,
+      keyFilename: config.googleCloud.keyFilename,
+    });
+    logger.info('Google Translate client initialized successfully.');
   } catch (err) {
-    logger.error(`Failed to initialize Google Translate client: ${err.message}. Translation service might not work correctly.`);
-    // Set translateClient to null to indicate failure
-    translateClient = null;
+    logger.error(`Failed to initialize Google Translate client: ${err.message}`, err);
+    googleTranslateClient = null;
   }
-} else {
-  logger.warn('Using internal mock for translation service.');
+  return googleTranslateClient;
 }
-// --- End: Conditional Google Cloud Client Initialization ---
 
-// Cache pour les traductions
-const translationCache = new Map();
+function getCacheKey(text, sourceLanguage, targetLanguage) {
+  const src = sourceLanguage || 'unknown';
+  const tgt = targetLanguage || 'unknown';
+  return `${src}:${tgt}:${text}`;
+}
 
-// Dictionnaire de traduction simplifiée pour les tests (Only used if config.testMockTranslate is true)
-// Ensure keys are lowercase for consistent lookup
-const translations = {
-  // Japonais -> Français
-  ja: {
-    'ウォッカ グレイグース': 'Vodka Grey Goose',
-    'ワイン カベルネ': 'Vin Cabernet',
-    'ジン ボンベイ': 'Gin Bombay',
-    'ウイスキー': 'Whisky',
-    'ビール': 'Bière',
-    'チョコレート': 'Chocolat',
-    'ボックス': 'Box',
-    'ウォッカ': 'Vodka',
-    '5本のワイン': '5 bouteilles de vin',
-    '3缶のビール': '3 cannettes de bière',
-    'チョコレートの箱': 'box de chocolat',
-    'インボイス': 'Facture',
-    '日付': 'Date',
-    'アイテム': 'Articles',
-    '合計': 'Total'
-  },
-  // Français -> Anglais (pour les tests) - Use lowercase keys
-  fr: {
-    'vin rouge': 'red wine',
-    'vin blanc': 'white wine',
-    'bière': 'beer',
-    'bière blonde': 'light beer',
-    'vodka': 'vodka',
-    'whisky': 'whiskey',
-    'chocolat': 'chocolate',
-    'bouteille de vin': 'bottle of wine',
-    'cannette de bière': 'can of beer',
-    'boîte de chocolat': 'box of chocolate'
-  }
-};
+function clearCache() {
+  cache = {};
+  logger.info('Translation cache cleared.');
+}
 
-/**
- * Détecte la langue du texte
- * @param {string} text - Texte à analyser
- * @returns {Promise<string>} - Code de langue détecté ('ja', 'en', 'fr', etc.)
- */
 async function detectLanguage(text) {
-  if (!text) return 'en'; // Default for empty text
-
-  // --- Use Google Cloud client if available and not mocking ---
-  if (translateClient && !config.testMockTranslate) {
-    try {
-      const [detections] = await translateClient.detect(text);
-      const detection = Array.isArray(detections) ? detections[0] : detections;
-      return detection?.language && detection.language !== 'und' ? detection.language : 'en';
-    } catch (error) {
-      logger.error(`Error detecting language via API: ${error.message}`, error);
-      // --- DO NOT re-throw, proceed to fallback ---
-    }
+  if (typeof text !== 'string' || text === '') {
+    logger.warn('detectLanguage called with empty or non-string input.');
+    throw new Error('Cannot detect language of empty or non-string text.');
   }
-  // --- End Google Cloud client usage ---
-
-  // --- Internal Mock/Fallback Detection ---
-  const japanesePattern = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF\u4E00-\u9FAF]/;
-  // Broader check for French: accents OR common words (case-insensitive)
-  const frenchPattern = /[éèêëàâäôöùûüïîçñÉÈÊËÀÂÄÔÖÙÛÜÏÎÇÑ]/i;
-  const commonFrenchWords = /\b(le|la|les|un|une|des|de|du|et|ou|est|sont|bonjour|merci|vin|bière)\b/i;
-
-  if (japanesePattern.test(text)) {
-    return 'ja';
-  } else if (frenchPattern.test(text) || commonFrenchWords.test(text)) { // Updated condition
-    return 'fr';
-  } else {
-    return 'en'; // Default
-  }
-  // --- End Internal Mock/Fallback Detection ---
-}
-
-/**
- * Traduit un texte d'une langue à une autre
- * @param {string} text - Texte à traduire
- * @param {string} sourceLanguage - Langue source (auto, en, ja, fr)
- * @param {string} targetLanguage - Langue cible (en, ja, fr)
- * @returns {Promise<string>} - Texte traduit
- */
-async function translate(text, sourceLanguage = 'auto', targetLanguage = 'fr') {
-  if (!text) return '';
-
-  // --- Determine actual source language ---
-  let actualSourceLanguage = sourceLanguage;
-  if (sourceLanguage === 'auto') {
-    try {
-      actualSourceLanguage = await detectLanguage(text);
-    } catch (detectError) {
-      // If detection fails (even API detection), log and default to 'en' for fallback
-      logger.error(`Auto-detection failed during translate: ${detectError.message}. Using 'en' for fallback.`, detectError);
-      actualSourceLanguage = 'en'; // Default to 'en' if detection fails
-    }
-  }
-  // --- End Determine actual source language ---
-
-  if (actualSourceLanguage === targetLanguage) return text;
-
-  const cacheKey = `${text}_${actualSourceLanguage}_${targetLanguage}`;
-  if (translationCache.has(cacheKey)) {
-    return translationCache.get(cacheKey);
-  }
-
-  // --- Use Google Cloud client if available and not mocking ---
-  if (translateClient && !config.testMockTranslate) {
-    try {
-      const options = {
-        from: actualSourceLanguage,
-        to: targetLanguage,
-      };
-      const [translationResult] = await translateClient.translate(text, options);
-      translationCache.set(cacheKey, translationResult);
-      return translationResult;
-    } catch (error) {
-      logger.error(`Error translating text via API: ${error.message}`, error);
-      // --- DO NOT re-throw, proceed to fallback ---
-    }
-  }
-  // --- End Google Cloud client usage ---
-
-  // --- Internal Mock/Fallback Logic ---
   if (config.testMockTranslate) {
-    // Use internal dictionary only if testMockTranslate is true
-    // Use lowercase for lookup
-    const lookupKey = text.toLowerCase();
-    if (translations[actualSourceLanguage] && translations[actualSourceLanguage][lookupKey]) {
-      const translatedResult = translations[actualSourceLanguage][lookupKey];
-      translationCache.set(cacheKey, translatedResult);
-      return translatedResult;
-    }
+    logger.debug('Detect language (mock mode): returning "en"');
+    return 'en';
   }
-
-  // Default mock/fallback format if no specific mock or API failed
-  const translatedText = `[${targetLanguage}] ${text}`;
-  translationCache.set(cacheKey, translatedText);
-  return translatedText;
-  // --- End Internal Mock/Fallback Logic ---
+  const client = getGoogleTranslateClient();
+  if (!client) {
+    logger.error('Cannot detect language: Google Translate client not initialized');
+    throw new Error('Google Translate client not initialized');
+  }
+  try {
+    const [detections] = await client.detect(text);
+    const detectedLang = Array.isArray(detections) ? detections[0]?.language : detections?.language;
+    if (!detectedLang) {
+      logger.error(`Detection API returned unexpected format for text "${text.substring(0, 20)}...". Result: ${JSON.stringify(detections)}`);
+      throw new Error('Detection result format unexpected or language missing.');
+    }
+    logger.debug(`Detected language: ${detectedLang} for text: "${text.substring(0, 20)}..."`);
+    return detectedLang;
+  } catch (err) {
+    logger.error(`Error detecting language via API for "${text.substring(0, 20)}...": ${err.message}`, err);
+    throw err;
+  }
 }
 
-/**
- * Traduit des textes en lot
- * @param {Array<string>} texts - Textes à traduire
- * @param {string} sourceLanguage - Langue source (auto, en, ja, fr)
- * @param {string} targetLanguage - Langue cible (en, ja, fr)
- * @returns {Promise<Array<string>>} - Textes traduits
- */
-async function batchTranslate(texts, sourceLanguage = 'auto', targetLanguage = 'fr') {
-  if (!Array.isArray(texts) || texts.length === 0) {
+async function translate(text, sourceLanguage, targetLanguage) {
+  if (typeof text !== 'string') {
+    logger.warn(`Translate called with non-string input: ${typeof text}. Returning empty string.`);
+    return '';
+  }
+  if (text === '') {
+    logger.debug('Translate called with empty string, returning empty string.');
+    return '';
+  }
+  if (!targetLanguage) {
+    logger.error('Translate called without targetLanguage. Cannot proceed.');
+    throw new Error('Target language must be specified.');
+  }
+  const cacheKey = getCacheKey(text, sourceLanguage, targetLanguage);
+  if (cache[cacheKey] !== undefined) {
+    logger.debug(`Cache hit for key: ${cacheKey}`);
+    return cache[cacheKey];
+  }
+  logger.debug(`Cache miss for key: ${cacheKey}`);
+
+  if (config.testMockTranslate) {
+    logger.debug(`Translate (mock mode): "${text}" from ${sourceLanguage} to ${targetLanguage}`);
+    const result = `[API-${targetLanguage}] ${text}`;
+    cache[cacheKey] = result;
+    return result;
+  }
+
+  const client = getGoogleTranslateClient();
+  if (!client) {
+    logger.error('Cannot translate: Google Translate client not initialized. Returning fallback.');
+    const fallbackResult = `[API-${targetLanguage}] ${text}`;
+    cache[cacheKey] = fallbackResult;
+    return fallbackResult;
+  }
+
+  try {
+    let fromLang = sourceLanguage;
+    if (sourceLanguage === 'auto') {
+      logger.debug(`Attempting auto-detection for text: "${text.substring(0, 20)}..."`);
+      try {
+        fromLang = await detectLanguage(text);
+      } catch (detectErr) {
+        logger.warn(`Failed to auto-detect language for "${text.substring(0, 20)}...", falling back to 'en'. Error: ${detectErr.message}`);
+        fromLang = 'en';
+      }
+    }
+    if (fromLang === targetLanguage) {
+      logger.debug(`Source (${fromLang}) and target (${targetLanguage}) languages match. Returning original text.`);
+      cache[cacheKey] = text;
+      return text;
+    }
+    logger.debug(`Translating "${text.substring(0, 20)}..." from ${fromLang} to ${targetLanguage}`);
+    const [translated] = await client.translate(text, { from: fromLang, to: targetLanguage });
+    const result = typeof translated === 'string' ? translated : `[API-${targetLanguage}] ${text}`;
+    if (typeof translated !== 'string') {
+      logger.warn(`Translation API returned non-string result (${typeof translated}) for "${text.substring(0, 20)}...". Falling back to fallback format.`);
+    }
+    logger.debug(`Translation successful for "${text.substring(0, 20)}...": "${result.substring(0, 20)}..."`);
+    cache[cacheKey] = result;
+    return result;
+  } catch (err) {
+    logger.error(`Error during translation API call for "${text.substring(0, 20)}...": ${err.message}`, err);
+    logger.warn(`Translation failed for "${text.substring(0, 20)}...". Returning fallback.`);
+    const fallbackResult = `[API-${targetLanguage}] ${text}`;
+    cache[cacheKey] = fallbackResult;
+    return fallbackResult;
+  }
+}
+
+async function batchTranslate(texts, sourceLanguage, targetLanguage) {
+  if (!Array.isArray(texts)) {
+    logger.warn('batchTranslate called with non-array input. Returning empty array.');
     return [];
   }
-
-  // --- Determine actual source language ---
-  let actualSourceLanguage = sourceLanguage;
-  if (sourceLanguage === 'auto') {
-    try {
-      // Detect based on the first non-empty text
-      const firstText = texts.find(t => !!t) || '';
-      actualSourceLanguage = await detectLanguage(firstText);
-    } catch (detectError) {
-      logger.error(`Auto-detection failed during batchTranslate: ${detectError.message}. Using 'en' for fallback.`, detectError);
-      actualSourceLanguage = 'en'; // Default to 'en' if detection fails
-    }
+  const validTexts = texts.filter(t => typeof t === 'string' && t !== '');
+  if (validTexts.length === 0) {
+    logger.debug('batchTranslate called with empty array or array containing only empty/non-string elements. Returning empty array.');
+    return [];
   }
-  // --- End Determine actual source language ---
-
-  if (actualSourceLanguage === targetLanguage) {
-    return [...texts];
+  if (validTexts.length < texts.length) {
+    logger.warn(`batchTranslate filtered out ${texts.length - validTexts.length} invalid (empty/non-string) elements.`);
   }
-
-  // --- Use Google Cloud client if available and not mocking ---
-  if (translateClient && !config.testMockTranslate) {
-    try {
-      const options = {
-        from: actualSourceLanguage,
-        to: targetLanguage,
-      };
-      const [translationsResult] = await translateClient.translate(texts, options);
-      return Array.isArray(translationsResult) ? translationsResult : [translationsResult];
-    } catch (error) {
-      logger.error(`Error batch translating texts via API: ${error.message}`, error);
-      // --- DO NOT re-throw, proceed to fallback ---
-    }
+  if (config.testMockTranslate) {
+    logger.debug(`Batch translate (mock mode): ${validTexts.length} items to ${targetLanguage}`);
+    return validTexts.map(text => `[API-${targetLanguage}] ${text}`);
   }
-  // --- End Google Cloud client usage ---
-
-  // --- Internal Mock/Fallback Logic ---
-  // Fallback: translate individually using the translate function
-  const promises = texts.map(text => translate(text, actualSourceLanguage, targetLanguage));
-  return await Promise.all(promises);
-  // --- End Internal Mock/Fallback Logic ---
-}
-
-/**
- * Traduit du japonais vers le français (fonction spécifique)
- * @param {string} japaneseText - Texte japonais à traduire
- * @returns {Promise<string>} - Texte traduit en français
- */
-async function translateJapaneseToFrench(japaneseText) {
-  return translate(japaneseText, 'ja', 'fr');
-}
-
-/**
- * Traduit les éléments d'une facture
- * @param {Array} items - Éléments de la facture à traduire
- * @param {string} sourceLanguage - Langue source (auto, en, ja, fr)
- * @param {string} targetLanguage - Langue cible (en, ja, fr)
- * @returns {Promise<Array>} - Éléments traduits
- */
-async function translateItems(items, sourceLanguage = 'auto', targetLanguage = 'fr') {
+  const client = getGoogleTranslateClient();
+  if (!client) {
+    logger.error('Cannot batch translate: Google Translate client not initialized.');
+    logger.warn('Falling back to individual translations due to uninitialized client.');
+    return batchTranslateFallback(validTexts, sourceLanguage, targetLanguage);
+  }
   try {
-    if (!Array.isArray(items) || items.length === 0) {
-      return [];
+    logger.debug(`Attempting batch translation for ${validTexts.length} items from ${sourceLanguage} to ${targetLanguage}`);
+    const [translated] = await client.translate(validTexts, { from: sourceLanguage, to: targetLanguage });
+    if (!Array.isArray(translated) || translated.length !== validTexts.length) {
+      logger.error(`Batch translation API returned unexpected result format or length. Expected array of length ${validTexts.length}, got: ${JSON.stringify(translated)}`);
+      throw new Error('Batch translation API returned unexpected result.');
     }
+    logger.debug(`Batch translation successful for ${validTexts.length} items.`);
+    return translated;
+  } catch (err) {
+    logger.error(`Batch translation failed: ${err.message}. Falling back to individual translations.`, err);
+    return batchTranslateFallback(validTexts, sourceLanguage, targetLanguage);
+  }
+}
 
-    const translatedItems = [];
-    for (const item of items) {
-      const productName = item.product || item.product_name || item.name || '';
-      if (!productName) {
-        translatedItems.push(item);
-        continue;
-      }
-      // Use the updated translate function which handles API/mock/fallback logic
-      const translatedName = await translate(productName, sourceLanguage, targetLanguage);
+async function batchTranslateFallback(texts, sourceLanguage, targetLanguage) {
+  const results = [];
+  logger.debug(`Executing batch fallback: translating ${texts.length} items individually.`);
+  for (const text of texts) {
+    try {
+      const result = await translate(text, sourceLanguage, targetLanguage);
+      results.push(result);
+    } catch (err) {
+      logger.error(`Error during individual fallback translation for "${text.substring(0,20)}...": ${err.message}`, err);
+      results.push(`[API-${targetLanguage}] ${text}`);
+    }
+  }
+  logger.debug(`Batch fallback completed for ${texts.length} items.`);
+  return results;
+}
+
+async function translateItems(items, sourceLanguage, targetLanguage) {
+  if (!Array.isArray(items)) {
+    logger.warn('translateItems: Input is not an array. Returning empty array.');
+    return [];
+  }
+  if (items.length === 0) {
+    logger.debug('translateItems: Input array is empty. Returning empty array.');
+    return [];
+  }
+  logger.debug(`Translating items: ${items.length} items from ${sourceLanguage} to ${targetLanguage}`);
+  const translatedItems = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item || typeof item !== 'object') {
+      logger.warn(`translateItems: Skipping invalid item at index ${i}. Item: ${JSON.stringify(item)}`);
+      translatedItems.push(item);
+      continue;
+    }
+    const originalName = item.product;
+    if (typeof originalName !== 'string' || originalName === '') {
+      logger.debug(`translateItems: Skipping item at index ${i} due to missing/empty/invalid 'product' property.`);
       translatedItems.push({
         ...item,
-        original_name: productName, // Store original name
-        translated_name: translatedName // Store potentially translated name
+        original_name: originalName || '',
+        translated_name: originalName || ''
       });
+      continue;
     }
-    return translatedItems;
-  } catch (error) {
-    logger.error(`Erreur lors de la traduction des éléments: ${error.message}`);
-    return items; // Return original items on error
+    let translatedName;
+    try {
+      translatedName = await translate(originalName, sourceLanguage, targetLanguage);
+    } catch (error) {
+      logger.error(
+        `Unexpected error processing item '${originalName}' in translateItems loop: ${error.message}`,
+        error
+      );
+      translatedName = `[API-${targetLanguage}] ${originalName}`;
+    }
+    translatedItems.push({
+      ...item,
+      original_name: originalName,
+      translated_name: translatedName
+    });
   }
+  logger.debug(`translateItems finished processing ${items.length} items.`);
+  return translatedItems;
 }
 
-/**
- * Efface le cache de traduction
- * Utile pour les tests pour assurer des conditions initiales propres
- */
-function clearCache() {
-  translationCache.clear();
+async function translateJapaneseToFrench(text) {
+  if (typeof text !== 'string' || text === '') {
+    logger.warn('translateJapaneseToFrench called with empty or non-string input.');
+    return '';
+  }
+  logger.debug(`Translating Japanese to French: "${text.substring(0, 20)}..."`);
+  return translate(text, 'ja', 'fr');
 }
 
 module.exports = {
+  detectLanguage,
   translate,
   batchTranslate,
-  translateJapaneseToFrench,
-  detectLanguage,
+  translateItems,
   clearCache,
-  translateItems
+  translateJapaneseToFrench,
 };
